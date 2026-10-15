@@ -12,6 +12,9 @@ pub enum ValidationError {
     #[error("API Key inválida")]
     InvalidApiKey,
 
+    #[error("API Key expirada")]
+    ExpiredApiKey,
+
     #[error("Rate limit excedido. Intente más tarde.")]
     RateLimitExceeded,
 
@@ -35,7 +38,7 @@ pub struct EmailValidationResponse {
     pub reason: String,
 }
 
-/// Registro persistente de API Key
+/// Registro persistente de API Key con soporte de expiración
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKeyRecord {
     pub id: String,
@@ -43,6 +46,7 @@ pub struct ApiKeyRecord {
     pub name: String,
     pub is_active: bool,
     pub created_at: String,
+    pub expires_at: Option<String>, // None = Nunca expira (Eterna)
     pub total_requests: u64,
 }
 
@@ -103,6 +107,8 @@ pub struct MetricsSnapshot {
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub api_key: String,
+    pub admin_user: String,
+    pub admin_password: String,
     pub allowed_origins: Vec<String>,
     pub rate_limit_qps: u32,
     pub port: u16,
@@ -115,6 +121,9 @@ impl AppConfig {
             eprintln!("ADVERTENCIA: API_KEY no configurada, usando valor por defecto");
             "default-key-for-development".to_string()
         });
+
+        let admin_user = std::env::var("ADMIN_USER").unwrap_or_else(|_| "Administrator".to_string());
+        let admin_password = std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "admin12345".to_string());
 
         let allowed_origins: Vec<String> = std::env::var("ALLOWED_ORIGINS")
             .unwrap_or_else(|_| "http://localhost:3000,http://localhost:5173".to_string())
@@ -137,6 +146,8 @@ impl AppConfig {
 
         Self {
             api_key,
+            admin_user,
+            admin_password,
             allowed_origins,
             rate_limit_qps,
             port,

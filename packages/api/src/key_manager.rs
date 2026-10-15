@@ -1,6 +1,6 @@
-//! KeyManager - Gestor persistente de claves API y usuarios
+//! KeyManager - Gestor persistente de claves API con expiración
 
-use chrono::Utc;
+use chrono::{DateTime, Duration, Utc};
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 use shared::ApiKeyRecord;
@@ -18,8 +18,14 @@ struct KeyStoreFile {
 #[derive(Debug, Clone)]
 pub struct KeyManager {
     file_path: PathBuf,
-    // Llave -> Record
+    // Key -> Record
     keys: Arc<RwLock<HashMap<String, ApiKeyRecord>>>,
+}
+
+pub enum KeyValidationResult {
+    Valid,
+    Expired,
+    Invalid,
 }
 
 impl KeyManager {
@@ -30,7 +36,7 @@ impl KeyManager {
 
         let mut map: HashMap<String, ApiKeyRecord> = HashMap::new();
 
-        // 1. Cargar claves existentes si el archivo existe
+        // 1. Cargar claves existentes del archivo
         if file_path.exists() {
             if let Ok(content) = fs::read_to_string(&file_path) {
                 if let Ok(store) = serde_json::from_str::<KeyStoreFile>(&content) {
@@ -41,14 +47,15 @@ impl KeyManager {
             }
         }
 
-        // 2. Asegurar que la master key del .env esté registrada
+        // 2. Asegurar que la master key del .env esté registrada (eterna)
         if !map.contains_key(master_key) {
             let master_record = ApiKeyRecord {
                 id: "master-key".to_string(),
                 key: master_key.to_string(),
-                name: "Clave Maestra (Entorno .env)".to_string(),
+                name: "Clave Maestra (.env)".to_string(),
                 is_active: true,
                 created_at: Utc::now().to_rfc3339(),
+                expires_at: None, // Eterna
                 total_requests: 0,
             };
             map.insert(master_key.to_string(), master_record);
@@ -65,13 +72,26 @@ impl KeyManager {
         manager
     }
 
-    /// Validar si una clave existe y está activa
-    pub async fn validate_key(&self, key: &str) -> bool {
+    /// Validar estado de la clave (activa y no expirada)
+    pub async fn validate_key(&self, key: &str) -> KeyValidationResult {
         let read = self.keys.read().await;
         if let Some(record) = read.get(key) {
-            record.is_active
+            if !record.is_active {
+                return KeyValidationResult::Invalid;
+            }
+
+            // Comprobar si ha expirado
+            if let Some(ref exp_str) = record.expires_at {
+                if let Ok(exp_time) = DateTime::parse_from_rfc3339(exp_str) {
+                    if Utc::now() > exp_time.with_timezone(&Utc) {
+                        return KeyValidationResult::Expired;
+                    }
+                }
+            }
+
+            KeyValidationResult::Valid
         } else {
-            false
+            KeyValidationResult::Invalid
         }
     }
 
@@ -91,8 +111,8 @@ impl KeyManager {
         list
     }
 
-    /// Crear una nueva clave para un usuario o cliente
-    pub async fn create_key(&self, name: String) -> ApiKeyRecord {
+    /// Crear una nueva clave con expiración configurable (días o None para eterna)
+    pub async fn create_key(&self, name: String, expires_in_days: Option<u32>) -> ApiKeyRecord {
         let random_part: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(32)
@@ -102,12 +122,22 @@ impl KeyManager {
         let generated_key = format!("ev_{}", random_part);
         let id = format!("key_{}", &random_part[0..8]);
 
+        let created_at = Utc::now();
+        let expires_at = expires_in_days.and_then(|days| {
+            if days > 0 {
+                Some((created_at + Duration::days(days as i64)).to_rfc3339())
+            } else {
+                None // 0 días = Eterna
+            }
+        });
+
         let record = ApiKeyRecord {
             id,
             key: generated_key.clone(),
             name,
             is_active: true,
-            created_at: Utc::now().to_rfc3339(),
+            created_at: created_at.to_rfc3339(),
+            expires_at,
             total_requests: 0,
         };
 
@@ -139,7 +169,7 @@ impl KeyManager {
         target
     }
 
-    /// Eliminar clave por ID
+    /// Eliminar clave por ID (no permite borrar master-key)
     pub async fn delete_key(&self, id: &str) -> bool {
         let mut found_key: Option<String> = None;
         {

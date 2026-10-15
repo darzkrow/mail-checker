@@ -1,4 +1,4 @@
-//! Email Validator API - Servidor REST con Panel Administrativo, Swagger y Gestión de API Keys
+//! Email Validator API - Servidor REST con Autenticación de Administrador, Panel Admin y API Keys con Expiración
 
 mod admin_ui;
 mod key_manager;
@@ -14,7 +14,7 @@ use axum::{
 };
 use dns::resolve_mx_records;
 use hickory_resolver::TokioAsyncResolver;
-use key_manager::KeyManager;
+use key_manager::{KeyManager, KeyValidationResult};
 use log_buffer::{LogBuffer, LogLayer};
 use serde::Deserialize;
 use serde_json::json;
@@ -54,6 +54,10 @@ impl IntoResponse for ApiError {
                 StatusCode::UNAUTHORIZED,
                 "Falta el header X-API-Key o es inválido".to_string(),
             ),
+            ApiError::Validation(ValidationError::ExpiredApiKey) => (
+                StatusCode::UNAUTHORIZED,
+                "La API Key proporcionada ha expirado. Contacte al administrador.".to_string(),
+            ),
             ApiError::Validation(ValidationError::RateLimitExceeded) => (
                 StatusCode::TOO_MANY_REQUESTS,
                 "Rate limit excedido. Intente más tarde.".to_string(),
@@ -82,6 +86,7 @@ struct EmailRequest {
 #[derive(Deserialize)]
 struct CreateKeyRequest {
     name: String,
+    expires_in_days: Option<u32>,
 }
 
 // ==================== ESTADO GLOBAL ====================
@@ -94,6 +99,50 @@ struct AppState {
     metrics: Arc<AtomicMetrics>,
     log_buffer: LogBuffer,
     start_time: Instant,
+}
+
+// ==================== VERIFICACIÓN DE CREDENCIALES ADMIN ====================
+
+fn check_admin_auth(headers: &HeaderMap, state: &AppState) -> bool {
+    if let Some(auth_header) = headers.get("Authorization").and_then(|h| h.to_str().ok()) {
+        if let Some(base64_part) = auth_header.strip_prefix("Basic ") {
+            use std::io::Read;
+            // Decodificación base64 manual/segura
+            if let Ok(decoded) = base64_decode(base64_part) {
+                if let Ok(cred_str) = String::from_utf8(decoded) {
+                    let parts: Vec<&str> = cred_str.splitn(2, ':').collect();
+                    if parts.len() == 2 {
+                        let user = parts[0];
+                        let pass = parts[1];
+                        return user == state.config.admin_user && pass == state.config.admin_password;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn base64_decode(input: &str) -> Result<Vec<u8>, ()> {
+    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let input = input.trim().as_bytes();
+    let mut out = Vec::new();
+    let mut buf = 0u32;
+    let mut bits = 0;
+
+    for &b in input {
+        if b == b'=' {
+            break;
+        }
+        let val = TABLE.iter().position(|&c| c == b).ok_or(())? as u32;
+        buf = (buf << 6) | val;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+        }
+    }
+    Ok(out)
 }
 
 // ==================== HANDLERS API PÚBLICA ====================
@@ -114,9 +163,16 @@ async fn validate_email_handler(
             ValidationError::InvalidApiKey
         })?;
 
-    if !state.key_manager.validate_key(api_key).await {
-        state.metrics.record_auth_failure();
-        return Err(ValidationError::InvalidApiKey.into());
+    match state.key_manager.validate_key(api_key).await {
+        KeyValidationResult::Valid => {}
+        KeyValidationResult::Expired => {
+            state.metrics.record_auth_failure();
+            return Err(ValidationError::ExpiredApiKey.into());
+        }
+        KeyValidationResult::Invalid => {
+            state.metrics.record_auth_failure();
+            return Err(ValidationError::InvalidApiKey.into());
+        }
     }
 
     // Registrar uso para la clave
@@ -155,7 +211,25 @@ async fn admin_dashboard_handler() -> Html<&'static str> {
     Html(ADMIN_HTML)
 }
 
-async fn get_metrics_handler(State(state): State<Arc<AppState>>) -> Json<MetricsSnapshot> {
+async fn admin_login_check(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<StatusCode, StatusCode> {
+    if check_admin_auth(&headers, &state) {
+        Ok(StatusCode::OK)
+    } else {
+        Err(StatusCode::UNAUTHORIZED)
+    }
+}
+
+async fn get_metrics_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<MetricsSnapshot>, StatusCode> {
+    if !check_admin_auth(&headers, &state) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
     let total = state.metrics.total_requests.load(Ordering::Relaxed);
     let success = state.metrics.successful_validations.load(Ordering::Relaxed);
     let deliverable = state.metrics.deliverable_count.load(Ordering::Relaxed);
@@ -178,7 +252,7 @@ async fn get_metrics_handler(State(state): State<Arc<AppState>>) -> Json<Metrics
 
     let uptime_seconds = state.start_time.elapsed().as_secs();
 
-    Json(MetricsSnapshot {
+    Ok(Json(MetricsSnapshot {
         total_requests: total,
         successful_validations: success,
         deliverable_count: deliverable,
@@ -188,27 +262,47 @@ async fn get_metrics_handler(State(state): State<Arc<AppState>>) -> Json<Metrics
         deliverability_rate,
         average_latency_ms,
         uptime_seconds,
-    })
+    }))
 }
 
-async fn list_keys_handler(State(state): State<Arc<AppState>>) -> Json<Vec<ApiKeyRecord>> {
+async fn list_keys_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ApiKeyRecord>>, StatusCode> {
+    if !check_admin_auth(&headers, &state) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
     let keys = state.key_manager.list_keys().await;
-    Json(keys)
+    Ok(Json(keys))
 }
 
 async fn create_key_handler(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(payload): Json<CreateKeyRequest>,
-) -> (StatusCode, Json<ApiKeyRecord>) {
-    let new_key = state.key_manager.create_key(payload.name).await;
-    info!("Nueva API Key generada: {} ({})", new_key.id, new_key.name);
-    (StatusCode::CREATED, Json(new_key))
+) -> Result<(StatusCode, Json<ApiKeyRecord>), StatusCode> {
+    if !check_admin_auth(&headers, &state) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let new_key = state
+        .key_manager
+        .create_key(payload.name, payload.expires_in_days)
+        .await;
+    info!(
+        "Nueva API Key generada: {} ({}, expira: {:?})",
+        new_key.id, new_key.name, new_key.expires_at
+    );
+    Ok((StatusCode::CREATED, Json(new_key)))
 }
 
 async fn toggle_key_handler(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<ApiKeyRecord>, StatusCode> {
+    if !check_admin_auth(&headers, &state) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
     state
         .key_manager
         .toggle_key(&id)
@@ -219,8 +313,12 @@ async fn toggle_key_handler(
 
 async fn delete_key_handler(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> StatusCode {
+    if !check_admin_auth(&headers, &state) {
+        return StatusCode::UNAUTHORIZED;
+    }
     if state.key_manager.delete_key(&id).await {
         StatusCode::NO_CONTENT
     } else {
@@ -228,8 +326,14 @@ async fn delete_key_handler(
     }
 }
 
-async fn get_logs_handler(State(state): State<Arc<AppState>>) -> Json<Vec<log_buffer::LogEntry>> {
-    Json(state.log_buffer.get_recent())
+async fn get_logs_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<log_buffer::LogEntry>>, StatusCode> {
+    if !check_admin_auth(&headers, &state) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    Ok(Json(state.log_buffer.get_recent()))
 }
 
 async fn openapi_spec_handler() -> Json<serde_json::Value> {
@@ -265,7 +369,7 @@ async fn openapi_spec_handler() -> Json<serde_json::Value> {
                     "responses": {
                         "200": { "description": "Resultado de la validación" },
                         "400": { "description": "Sintaxis de email inválida" },
-                        "401": { "description": "API Key inválida o ausente" }
+                        "401": { "description": "API Key inválida, ausente o expirada" }
                     }
                 }
             },
@@ -319,6 +423,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📡 Puerto: {}", config.port);
     println!("🔗 URL Base: http://0.0.0.0:{}", config.port);
     println!("📊 Panel Admin: http://0.0.0.0:{}/admin", config.port);
+    println!("👤 Usuario Admin: {}", config.admin_user);
+    println!("🔑 Clave Admin: {}", config.admin_password);
     println!("📖 Swagger / OpenAPI: http://0.0.0.0:{}/api/v1/openapi.json", config.port);
     println!("📁 Directorio de Persistencia: {}", config.data_dir);
     println!("========================================");
@@ -328,6 +434,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([
             axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
             axum::http::header::HeaderName::from_static("x-api-key"),
         ]);
 
@@ -342,14 +449,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cors = cors.allow_origin(origins);
     }
 
-    // 4. Configuración del Router con Rutas de API y Admin
+    // 4. Configuración del Router con Rutas de API y Admin protegidas
     let app = Router::new()
         // API Pública
         .route("/health", get(health_check))
         .route("/api/v1/validate-email", post(validate_email_handler))
         .route("/api/v1/openapi.json", get(openapi_spec_handler))
-        // Panel Administrativo & Métricas
+        // Panel Administrativo & Métricas Protegidas
         .route("/admin", get(admin_dashboard_handler))
+        .route("/api/v1/admin/login", get(admin_login_check))
         .route("/api/v1/admin/metrics", get(get_metrics_handler))
         .route("/api/v1/admin/keys", get(list_keys_handler).post(create_key_handler))
         .route("/api/v1/admin/keys/:id/toggle", post(toggle_key_handler))

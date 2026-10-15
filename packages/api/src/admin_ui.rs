@@ -1,4 +1,4 @@
-//! UI del Panel Administrativo Integrado en Axum (HTML/CSS/JS Embebido)
+//! UI del Panel Administrativo Integrado en Axum (HTML/CSS/JS Embebido) con Login y Expiración
 
 pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
 <html lang="es">
@@ -11,9 +11,9 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
   <style>
     :root {
       --bg: #0b0f19;
-      --card-bg: rgba(18, 24, 38, 0.7);
+      --card-bg: rgba(18, 24, 38, 0.75);
       --card-border: rgba(255, 255, 255, 0.08);
-      --card-border-hover: rgba(99, 102, 241, 0.3);
+      --card-border-hover: rgba(99, 102, 241, 0.35);
       --primary: #6366f1;
       --primary-hover: #4f46e5;
       --primary-glow: rgba(99, 102, 241, 0.25);
@@ -40,6 +40,30 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+    }
+
+    /* LOGIN MODAL OVERLAY */
+    #loginOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(11, 15, 25, 0.95);
+      backdrop-filter: blur(16px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .login-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border-hover);
+      border-radius: 20px;
+      padding: 2.5rem;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 40px var(--primary-glow);
+      text-align: center;
     }
 
     /* HEADER */
@@ -123,6 +147,13 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
       color: #fff;
       background: var(--primary);
       box-shadow: 0 0 15px var(--primary-glow);
+    }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.85rem;
     }
 
     /* MAIN CONTAINER */
@@ -266,6 +297,7 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
     }
     .badge-success { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
     .badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
     .badge-info { background: rgba(6, 182, 212, 0.15); color: var(--accent); border: 1px solid rgba(6, 182, 212, 0.3); }
 
     /* LOGS CONSOLE */
@@ -305,6 +337,38 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
 </head>
 <body>
 
+  <!-- LOGIN MODAL SI NO ESTA AUTENTICADO -->
+  <div id="loginOverlay">
+    <div class="login-card">
+      <div style="display:flex; justify-content:center; margin-bottom:1rem;">
+        <div class="brand-icon" style="width:52px; height:52px;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
+      </div>
+      <h2 style="font-size:1.4rem; font-weight:800; margin-bottom:0.25rem;">Panel de Administración</h2>
+      <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1.5rem;">Inicia sesión con las credenciales preconfiguradas</p>
+      
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="input-group" style="text-align:left;">
+          <label>Usuario</label>
+          <input type="text" id="loginUser" value="Administrator" required>
+        </div>
+        <div class="input-group" style="text-align:left;">
+          <label>Contraseña</label>
+          <input type="password" id="loginPass" value="admin12345" required>
+        </div>
+        <div id="loginError" style="display:none; color:var(--danger); font-size:0.8rem; margin-bottom:1rem; font-weight:600;">
+          Credenciales incorrectas.
+        </div>
+        <button type="submit" class="btn" style="width:100%; justify-content:center; padding:0.75rem;">
+          Ingresar al Panel
+        </button>
+      </form>
+    </div>
+  </div>
+
   <header>
     <div class="brand">
       <div class="brand-icon">
@@ -339,6 +403,11 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
         Logs en Vivo
       </button>
     </nav>
+
+    <div class="user-profile">
+      <span class="badge badge-success" id="activeUserBadge">Administrator</span>
+      <button class="btn btn-sm btn-danger" onclick="logout()">Salir</button>
+    </div>
   </header>
 
   <main>
@@ -418,15 +487,15 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
               <span style="font-weight:700;">2 KB (Activo)</span>
             </div>
             <div style="display:flex; justify-content:space-between; padding:0.5rem 0;">
-              <span style="color:var(--text-muted)">DNS Engine</span>
-              <span class="badge badge-info">Hickory Async (Tokio)</span>
+              <span style="color:var(--text-muted)">Almacén Persistente</span>
+              <span class="badge badge-info">data/keys.json</span>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- TAB 2: GESTION DE API KEYS -->
+    <!-- TAB 2: GESTION DE API KEYS CON EXPIRACION -->
     <section id="tab-keys" class="tab-content">
       <div style="display:grid; grid-template-columns: 1fr 2fr; gap:1.5rem;">
         <div class="card">
@@ -436,7 +505,17 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
           <form id="createKeyForm" onsubmit="handleCreateKey(event)">
             <div class="input-group">
               <label for="keyClientName">Nombre del Cliente / Usuario</label>
-              <input type="text" id="keyClientName" placeholder="Ej: App Móvil iOS, Integración Stripe..." required>
+              <input type="text" id="keyClientName" placeholder="Ej: App Móvil, Integración Pagos..." required>
+            </div>
+            <div class="input-group">
+              <label for="keyExpiration">Tiempo de Expiración</label>
+              <select id="keyExpiration">
+                <option value="0">♾️ Eterna (Sin Expiración)</option>
+                <option value="7">7 Días</option>
+                <option value="30">30 Días (1 Mes)</option>
+                <option value="90">90 Días (3 Meses)</option>
+                <option value="365">365 Días (1 Año)</option>
+              </select>
             </div>
             <button type="submit" class="btn" style="width:100%;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -464,12 +543,13 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
                   <th>Cliente / Nombre</th>
                   <th>API Key</th>
                   <th>Estado</th>
+                  <th>Expiración</th>
                   <th>Peticiones</th>
                   <th>Acción</th>
                 </tr>
               </thead>
               <tbody id="keysTableBody">
-                <tr><td colspan="5" style="text-align:center; color:var(--text-muted)">Cargando claves...</td></tr>
+                <tr><td colspan="6" style="text-align:center; color:var(--text-muted)">Cargando claves...</td></tr>
               </tbody>
             </table>
           </div>
@@ -485,7 +565,7 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
             <h3 class="card-title">🧪 Probador Interactivo (Try It Out)</h3>
           </div>
           <div class="input-group">
-            <label>Seleccionar API Key</label>
+            <label>Seleccionar API Key Activa</label>
             <select id="testerKeySelect" onchange="syncTesterKey()"></select>
           </div>
           <div class="input-group">
@@ -521,7 +601,7 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
         <div style="display:flex; flex-direction:column; gap:1rem; font-size:0.875rem;">
           <div style="background:rgba(255,255,255,0.02); padding:1rem; border-radius:8px; border-left:4px solid var(--primary)">
             <strong>POST /api/v1/validate-email</strong>
-            <p style="color:var(--text-muted); margin:0.3rem 0;">Valida sintaxis RFC 5322 y resuelve registros MX DNS asíncronos en tiempo real.</p>
+            <p style="color:var(--text-muted); margin:0.3rem 0;">Valida sintaxis RFC 5322 y resuelve registros MX DNS asíncronos en tiempo real con verificación de expiración de clave.</p>
             <div style="font-size:0.75rem; color:var(--text-muted)">Headers: <code>Content-Type: application/json</code>, <code>X-API-Key: string</code></div>
           </div>
           <div style="background:rgba(255,255,255,0.02); padding:1rem; border-radius:8px; border-left:4px solid var(--success)">
@@ -550,6 +630,47 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
   <script>
     let currentTab = 'metrics';
 
+    function getAuthHeaders() {
+      const token = sessionStorage.getItem('admin_token');
+      return token ? { 'Authorization': `Basic ${token}` } : {};
+    }
+
+    function checkAuth() {
+      const token = sessionStorage.getItem('admin_token');
+      const overlay = document.getElementById('loginOverlay');
+      if (token) {
+        overlay.style.display = 'none';
+        loadMetrics();
+      } else {
+        overlay.style.display = 'flex';
+      }
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const u = document.getElementById('loginUser').value.trim();
+      const p = document.getElementById('loginPass').value.trim();
+      const cred = btoa(`${u}:${p}`);
+
+      const res = await fetch('/api/v1/admin/login', {
+        headers: { 'Authorization': `Basic ${cred}` }
+      });
+
+      if (res.ok) {
+        sessionStorage.setItem('admin_token', cred);
+        document.getElementById('loginError').style.display = 'none';
+        document.getElementById('loginOverlay').style.display = 'none';
+        loadMetrics();
+      } else {
+        document.getElementById('loginError').style.display = 'block';
+      }
+    }
+
+    function logout() {
+      sessionStorage.removeItem('admin_token');
+      location.reload();
+    }
+
     function switchTab(tabId) {
       currentTab = tabId;
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -567,7 +688,8 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
     // CARGAR METRICAS
     async function loadMetrics() {
       try {
-        const res = await fetch('/api/v1/admin/metrics');
+        const res = await fetch('/api/v1/admin/metrics', { headers: getAuthHeaders() });
+        if (res.status === 401) { logout(); return; }
         if (!res.ok) return;
         const d = await res.json();
 
@@ -601,15 +723,36 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
     // CARGAR KEYS
     async function loadKeys() {
       try {
-        const res = await fetch('/api/v1/admin/keys');
+        const res = await fetch('/api/v1/admin/keys', { headers: getAuthHeaders() });
         if (!res.ok) return;
         const keys = await res.json();
         const tbody = document.getElementById('keysTableBody');
         tbody.innerHTML = '';
 
+        const now = new Date();
+
         keys.forEach(k => {
           const tr = document.createElement('tr');
           const isMaster = k.id === 'master-key';
+
+          // Expiration status
+          let expHtml = '<span class="badge badge-info">♾️ Eterna</span>';
+          let isExpired = false;
+          if (k.expires_at) {
+            const expDate = new Date(k.expires_at);
+            if (now > expDate) {
+              isExpired = true;
+              expHtml = `<span class="badge badge-danger">Expirada (${expDate.toLocaleDateString()})</span>`;
+            } else {
+              const diffDays = Math.ceil((expDate - now) / (1000 * 60 * 60 * 24));
+              expHtml = `<span class="badge badge-warning">${diffDays} días restantes</span>`;
+            }
+          }
+
+          let statusHtml = k.is_active 
+            ? (isExpired ? '<span class="badge badge-danger">Inactiva (Expirada)</span>' : '<span class="badge badge-success">Activa</span>')
+            : '<span class="badge badge-danger">Desactivada</span>';
+
           tr.innerHTML = `
             <td>
               <strong>${k.name}</strong><br>
@@ -619,11 +762,8 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
               <code style="font-family:var(--font-mono); color:var(--accent);">${k.key.substring(0, 10)}...</code>
               <button class="btn btn-sm" style="padding:0.2rem 0.5rem; margin-left:0.4rem;" onclick="copyText('${k.key}')">Copiar</button>
             </td>
-            <td>
-              ${k.is_active 
-                ? '<span class="badge badge-success">Activa</span>' 
-                : '<span class="badge badge-danger">Inactiva</span>'}
-            </td>
+            <td>${statusHtml}</td>
+            <td>${expHtml}</td>
             <td><strong style="font-family:var(--font-mono)">${k.total_requests}</strong></td>
             <td>
               ${isMaster ? '<span style="font-size:0.75rem; color:var(--text-muted)">Master</span>' : `
@@ -642,12 +782,16 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
     async function handleCreateKey(e) {
       e.preventDefault();
       const name = document.getElementById('keyClientName').value.trim();
+      const expDays = parseInt(document.getElementById('keyExpiration').value, 10);
       if (!name) return;
 
       const res = await fetch('/api/v1/admin/keys', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          name,
+          expires_in_days: expDays > 0 ? expDays : null 
+        })
       });
 
       if (res.ok) {
@@ -660,13 +804,13 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
     }
 
     async function toggleKey(id) {
-      await fetch(`/api/v1/admin/keys/${id}/toggle`, { method: 'POST' });
+      await fetch(`/api/v1/admin/keys/${id}/toggle`, { method: 'POST', headers: getAuthHeaders() });
       loadKeys();
     }
 
     async function deleteKey(id) {
       if (!confirm('¿Seguro que deseas eliminar esta API Key permanentemente?')) return;
-      await fetch(`/api/v1/admin/keys/${id}`, { method: 'DELETE' });
+      await fetch(`/api/v1/admin/keys/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
       loadKeys();
     }
 
@@ -682,7 +826,7 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
 
     // SWAGGER / TESTER
     async function loadKeysForTester() {
-      const res = await fetch('/api/v1/admin/keys');
+      const res = await fetch('/api/v1/admin/keys', { headers: getAuthHeaders() });
       if (!res.ok) return;
       const keys = await res.json();
       const select = document.getElementById('testerKeySelect');
@@ -741,7 +885,7 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
     // LOGS
     async function loadLogs() {
       try {
-        const res = await fetch('/api/v1/admin/logs');
+        const res = await fetch('/api/v1/admin/logs', { headers: getAuthHeaders() });
         if (!res.ok) return;
         const logs = await res.json();
         const container = document.getElementById('terminalContainer');
@@ -769,12 +913,14 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
 
     // Auto-refresh métricas cada 5 segundos
     setInterval(() => {
-      if (currentTab === 'metrics') loadMetrics();
-      if (currentTab === 'logs') loadLogs();
+      if (sessionStorage.getItem('admin_token')) {
+        if (currentTab === 'metrics') loadMetrics();
+        if (currentTab === 'logs') loadLogs();
+      }
     }, 5000);
 
-    // Carga inicial
-    loadMetrics();
+    // Comprobar autenticación inicial
+    checkAuth();
   </script>
 </body>
 </html>
