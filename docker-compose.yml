@@ -12,6 +12,8 @@ services:
       - PORT=3000
       - RATE_LIMIT_QPS=${RATE_LIMIT_QPS:-10}
       - RUST_LOG=${RUST_LOG:-info}
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]

@@ -1,5 +1,6 @@
 //! email-validator-shared - Modelos y errores compartidos
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
 
 /// Errores de validación de correo
@@ -34,6 +35,70 @@ pub struct EmailValidationResponse {
     pub reason: String,
 }
 
+/// Registro persistente de API Key
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyRecord {
+    pub id: String,
+    pub key: String,
+    pub name: String,
+    pub is_active: bool,
+    pub created_at: String,
+    pub total_requests: u64,
+}
+
+/// Estructura atómica para recolección de métricas sin bloqueo
+#[derive(Debug, Default)]
+pub struct AtomicMetrics {
+    pub total_requests: AtomicU64,
+    pub successful_validations: AtomicU64,
+    pub deliverable_count: AtomicU64,
+    pub non_deliverable_count: AtomicU64,
+    pub invalid_syntax_count: AtomicU64,
+    pub auth_failures: AtomicU64,
+    pub total_latency_ms: AtomicU64,
+}
+
+impl AtomicMetrics {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn record_success(&self, is_deliverable: bool, latency_ms: u64) {
+        self.total_requests.fetch_add(1, Ordering::Relaxed);
+        self.successful_validations.fetch_add(1, Ordering::Relaxed);
+        if is_deliverable {
+            self.deliverable_count.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.non_deliverable_count.fetch_add(1, Ordering::Relaxed);
+        }
+        self.total_latency_ms.fetch_add(latency_ms, Ordering::Relaxed);
+    }
+
+    pub fn record_syntax_error(&self) {
+        self.total_requests.fetch_add(1, Ordering::Relaxed);
+        self.invalid_syntax_count.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_auth_failure(&self) {
+        self.total_requests.fetch_add(1, Ordering::Relaxed);
+        self.auth_failures.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// Snapshot de métricas para serializar al Dashboard
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetricsSnapshot {
+    pub total_requests: u64,
+    pub successful_validations: u64,
+    pub deliverable_count: u64,
+    pub non_deliverable_count: u64,
+    pub invalid_syntax_count: u64,
+    pub auth_failures: u64,
+    pub deliverability_rate: f64,
+    pub average_latency_ms: f64,
+    pub uptime_seconds: u64,
+}
+
 /// Configuración de la aplicación compartida
 #[derive(Debug, Clone)]
 pub struct AppConfig {
@@ -41,6 +106,7 @@ pub struct AppConfig {
     pub allowed_origins: Vec<String>,
     pub rate_limit_qps: u32,
     pub port: u16,
+    pub data_dir: String,
 }
 
 impl AppConfig {
@@ -67,11 +133,14 @@ impl AppConfig {
             .and_then(|v| v.parse().ok())
             .unwrap_or(3000);
 
+        let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "./data".to_string());
+
         Self {
             api_key,
             allowed_origins,
             rate_limit_qps,
             port,
+            data_dir,
         }
     }
 }
