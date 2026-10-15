@@ -1,0 +1,10 @@
+[package]
+name = "validation"
+description = "Validación de sintaxis de correo RFC 5322"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+shared = { path = "../shared" }
+serde.workspace = true

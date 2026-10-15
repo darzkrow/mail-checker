@@ -1,0 +1,27 @@
+[package]
+name = "api"
+description = "Microservicio REST API de validación de emails"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "email-validator"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.7"
+tokio.workspace = true
+tower-http = { version = "0.5", features = ["cors", "trace", "limit"] }
+hickory-resolver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+shared = { path = "../shared" }
+validation = { path = "../validation" }
+dns = { path = "../dns" }
+
+[dev-dependencies]
+tokio-test = "0.4"

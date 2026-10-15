@@ -1,0 +1,537 @@
+{
+  "info": {
+    "name": "Email Validator API",
+    "description": "Colección de pruebas para el microservicio de validación de correos electrónicos con seguridad DevSecOps",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "item": [
+    {
+      "name": "📋 Setup - Configure Environment",
+      "item": [
+        {
+          "name": "Create Environment Variables",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}",
+              "host": ["{{base_url}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "✅ Validación Exitosa",
+      "item": [
+        {
+          "name": "Valid Email with MX Records (Gmail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@gmail.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Valid Email with MX Records (Outlook)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@outlook.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "❌ Errores de Validación",
+      "item": [
+        {
+          "name": "Invalid Email Syntax (No @)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario.sin.arroba.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid Email Syntax (Multiple @)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@@dominio.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid Email Syntax (Spaces)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario con espacios@dominio.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "⚠️ Dominios sin MX",
+      "item": [
+        {
+          "name": "Valid Email without MX Records",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@dominio-inexistente-12345.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Valid Email but No MX (Non-Existent TLD)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@dominio.notld\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔐 Errores de Autenticación",
+      "item": [
+        {
+          "name": "Missing API Key (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@gmail.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid API Key (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "invalid-api-key-12345"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@gmail.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🚫 Rate Limiting Tests",
+      "item": [
+        {
+          "name": "Rate Limit Test (10 requests)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@gmail.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📦 Tests de Payload",
+      "item": [
+        {
+          "name": "Valid Email with Special Characters",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario+test@gmail.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Email with Dots in Local Part",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario.nombre.apellido@gmail.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Email with Subdomain",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@sub.dominio.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🧪 Edge Cases",
+      "item": [
+        {
+          "name": "Empty Email Field",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Very Long Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"verysuperduperlonglocalpartthatisactuallywaytoolongbutwewanttotestit@verylongdomainnamethatgoesonandon.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Email with Unicode (Should Fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario©@dominio.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "your-super-secret-api-key-change-me-in-production",
+      "type": "string"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "console.log('Starting Email Validator API Test Suite');",
+          "console.log('Base URL:', pm.variables.get('base_url'));"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Tests comunes para todas las respuestas",
+          "pm.test('Response time is less than 5000ms', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "});",
+          "",
+          "// Test para respuestas exitosas (200)",
+          "if (pm.response.code === 200) {",
+          "    pm.test('Status code is 200', function () {",
+          "        pm.response.to.have.status(200);",
+          "    });",
+          "    ",
+          "    pm.test('Response has required fields', function () {",
+          "        const jsonData = pm.response.json();",
+          "        pm.expect(jsonData).to.have.property('email');",
+          "        pm.expect(jsonData).to.have.property('is_valid_syntax');",
+          "        pm.expect(jsonData).to.have.property('has_mx_records');",
+          "        pm.expect(jsonData).to.have.property('is_deliverable');",
+          "        pm.expect(jsonData).to.have.property('reason');",
+          "    });",
+          "}",
+          "",
+          "// Test para errores 4xx/5xx",
+          "if (pm.response.code >= 400 && pm.response.code < 600) {",
+          "    pm.test('Error response has correct structure', function () {",
+          "        const jsonData = pm.response.json();",
+          "        pm.expect(jsonData).to.have.property('error');",
+          "        pm.expect(jsonData).to.have.property('status');",
+          "        pm.expect(jsonData.status).to.equal(pm.response.code);",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "auth": null
+}

@@ -1,0 +1,38 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# Cargo lock file (optional - remove if you want to commit it)
+Cargo.lock
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
+docker-compose.override.yml
+
+# Test coverage
+*.profraw
+*.profdata
+coverage/
+
+# Binaries
+email-validator
+
+# Temporary files
+tmp/
+temp/

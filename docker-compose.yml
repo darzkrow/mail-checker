@@ -1,0 +1,29 @@
+services:
+  email-validator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: email-validator-api
+    ports:
+      - "3000:3000"
+    environment:
+      - API_KEY=${API_KEY:-your-super-secret-api-key-change-me-in-production}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:8080}
+      - PORT=3000
+      - RATE_LIMIT_QPS=${RATE_LIMIT_QPS:-10}
+      - RUST_LOG=${RUST_LOG:-info}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - email-validator-net
+    mem_limit: 256m
+    cpus: "1.0"
+
+networks:
+  email-validator-net:
+    driver: bridge
