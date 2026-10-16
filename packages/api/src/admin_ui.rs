@@ -732,10 +732,23 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
         const now = new Date();
 
         keys.forEach(k => {
+          # Ocultar la clave maestra del .env - no mostrar su valor por seguridad
+          if (k.id === 'master-key') {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '''
+              <td colspan="6" style="text-align:center; color:var(--text-muted); font-style:italic;">
+                <strong>Clave Maestra</strong><br>
+                <span style="font-size:0.7rem; color:var(--text-muted);">Configurada en .env - valor no mostrado por seguridad</span>
+              </td>
+            ''';
+            tbody.appendChild(tr);
+            return; // Skip further processing for master key
+          }
+
           const tr = document.createElement('tr');
           const isMaster = k.id === 'master-key';
 
-          // Expiration status
+          # Expiration status
           let expHtml = '<span class="badge badge-info">♾️ Eterna</span>';
           let isExpired = false;
           if (k.expires_at) {
@@ -832,6 +845,8 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
       const select = document.getElementById('testerKeySelect');
       select.innerHTML = '';
       keys.forEach(k => {
+        # Skip master key from tester selector
+        if (k.id === 'master-key') return;
         const opt = document.createElement('option');
         opt.value = k.key;
         opt.text = `${k.name} (${k.key.substring(0, 10)}...)`;

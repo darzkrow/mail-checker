@@ -470,7 +470,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔗 URL Base: http://0.0.0.0:{}", config.port);
     println!("📊 Panel Admin: http://0.0.0.0:{}/admin", config.port);
     println!("👤 Usuario Admin: {}", config.admin_user);
-    println!("🔑 Clave Admin: {}", config.admin_password);
+    println!("🔑 Clave Admin: ******** (hash almacenado en configuración)");
     println!("📖 Swagger / OpenAPI: http://0.0.0.0:{}/api/v1/openapi.json", config.port);
     println!("📁 Directorio de Persistencia: {}", config.data_dir);
     println!("========================================");
