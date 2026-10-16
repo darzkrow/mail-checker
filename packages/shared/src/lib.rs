@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
 use sha2::{Sha256, Digest};
-
 /// Errores de validación de correo
 #[derive(Error, Debug, Clone, Serialize, Deserialize)]
 pub enum ValidationError {
@@ -135,11 +134,11 @@ impl AdminPasswordHash {
         let mut hasher = Sha256::new();
         hasher.update(format!("{salt_bytes:?}{password}").as_bytes());
         // Usar los bytes crudos de la sal directamente
-        // Convertimos a string legible tomando solo los bytes imprimibles
+        // Convertimos a string legible tomando solo los bytes imprimibles ASCII (32-126)
         let salt_str: String = salt_bytes
             .iter()
-            .filter(|b| b.is_ascii_printable())
-            .map(|b| *b as char)
+            .filter(|&&b| b >= 32 && b <= 126)
+            .map(|&b| b as char)
             .collect();
 
         hasher.update(salt_str.as_bytes());
@@ -219,17 +218,16 @@ impl AppConfig {
             match (stored_hash, stored_salt) {
                 (Some(hash), Some(salt)) => {
                     // Usar hash y salt existentes
-                    let hash = hash;
-                    let salt = salt;
+                    let password = std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "admin12345".to_string());
                     // Crear AdminPasswordHash desde los valores almacenados
-                    AdminPasswordHash {
+                    (password, AdminPasswordHash {
                         salt,
                         hash,
-                    }
+                    })
                 }
                 _ => {
                     // Generar nuevos hash con la contraseña actual del .env
-        let raw_password = std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "admin12345".to_string());
+                    let raw_password = std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "admin12345".to_string());
                     let hash = AdminPasswordHash::new(&raw_password);
                     (raw_password, hash)
                 }

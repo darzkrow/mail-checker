@@ -19,7 +19,7 @@ use log_buffer::{LogBuffer, LogLayer};
 use serde::Deserialize;
 use serde_json::json;
 use shared::{
-    ApiKeyRecord, AppConfig, AtomicMetrics, EmailValidationResponse, MetricsSnapshot,
+    ApiKeyRecord, AppConfig, AtomicMetrics, EmailValidationResponse, MetricsSnapshot, PasswordPolicy, AdminPasswordHash,
     ValidationError,
 };
 use std::{
@@ -81,6 +81,12 @@ impl IntoResponse for ApiError {
 #[derive(Deserialize)]
 struct EmailRequest {
     email: String,
+}
+
+#[derive(Deserialize)]
+struct CreateKeyRequest {
+    name: String,
+    expires_in_days: Option<u32>,
 }
 
 #[derive(Deserialize)]
