@@ -6,44 +6,37 @@ Este documento detalla las medidas de seguridad implementadas en el microservici
 
 ## 🛡️ **Medidas de Seguridad Implementadas**
 
-### **1. Autenticación por API Key**
-- ✅ **Header requerido**: `X-API-Key` en todas las solicitudes
-- ✅ **Validación estricta**: Claves comparadas con variable de entorno
-- ✅ **Sin claves hardcodeadas**: Todas las claves viajan por variables de entorno
-- ✅ **Error handling seguro**: No leaks de información en errores 401
+### **1. Autenticación por API Key y Gestión de Ciclo de Vida**
+- ✅ **Header requerido**: `X-API-Key` en todas las solicitudes del endpoint de validación
+- ✅ **Soporte de expiración y revocación**: Claves con fecha de vencimiento configurable y desactivación inmediata
+- ✅ **Persistencia atómica**: Base de datos de claves persistida en disco de forma transaccional (`.tmp` -> replace)
+- ✅ **Error handling seguro**: Respuestas 401 sin fugas de información
 
-### **2. Rate Limiting por IP**
-- ✅ **Límite configurable**: 10 solicitudes/segundo por IP (default)
-- ✅ **Detección de proxy**: Usa `X-Forwarded-For` cuando disponible
-- ✅ **Gobernador**: Biblioteca `governor` probada en producción
-- ✅ **Configuración flexible**: Ajustable por variable de entorno
+### **2. Rate Limiting Activo**
+- ✅ **Límite configurable**: Control de frecuencia por API Key basado en `RATE_LIMIT_QPS` (por defecto: 10 peticiones/segundo)
+- ✅ **Ventana de control en memoria**: Algoritmo de conteo con auto-limpieza periódica para evitar fugas de memoria
+- ✅ **Respuesta estándar**: HTTP 429 Too Many Requests con mensaje de reintento
 
-### **3. Control de CORS**
-- ✅ **Dominios específicos**: Solo dominios autorizados permitidos
-- ✅ **No wildcards**: Nunca se usa `*` en producción
-- ✅ **Headers limitados**: Solo headers necesarios permitidos
-- ✅ **Métodos restringidos**: Solo POST y OPTIONS permitidos
+### **3. Seguridad del Panel de Administración**
+- ✅ **Hash SHA-256 con Sal Aleatoria (16 caracteres)**: Cada contraseña se combina con una sal alfanumérica única
+- ✅ **Verificación simétrica y determinista**: Verificación inmune a discrepancias de codificación base64
+- ✅ **Persistencia transaccional de credenciales**: Almacenamiento seguro en `{DATA_DIR}/admin_auth.json`
+- ✅ **Política estricta de contraseñas**: Validación de longitud mínima/máxima, mayúsculas, minúsculas, números y caracteres especiales
+- ✅ **Autenticación HTTP Basic con decodificación estándar**: Uso de `base64::engine::general_purpose::STANDARD`
 
-### **4. Límite de Payload**
-- ✅ **2KB máximo**: Previene ataques de memoria
-- ✅ **Middleware de tower-http**: Validación temprana
-- ✅ **Error 413 claro**: Respuesta informativa
+### **4. Control de CORS y Límites de Carga**
+- ✅ **Dominios restringidos**: Configurados mediante `ALLOWED_ORIGINS`
+- ✅ **Límite de Payload estricto**: Máximo 2KB (`DefaultBodyLimit::max(2048)`) para prevenir ataques de saturación de memoria
 
-### **5. Validación de Entrada**
-- ✅ **Sintaxis RFC 5322**: Validación estricta de correos
-- ✅ **Sanitización**: Trim de espacios, validación de caracteres
-- ✅ **Sin unwrap/panic**: Manejo de errores seguro en todo el código
+### **5. Validación Rigurosa y Mitigación de Ataques DNS**
+- ✅ **Cumplimiento RFC 5321 y RFC 5322**: Rechazo de inyecciones de encabezados, caracteres de control, puntos consecutivos y etiquetas malformadas
+- ✅ **Protección Null MX (RFC 7505)**: Prevención de falsos positivos en dominios que rechazan correo
+- ✅ **Fallback SMTP (RFC 5321 §5.1)**: Resolución hacia A/AAAA cuando no existan registros MX explícitos
 
-### **6. Timeouts DNS**
-- ✅ **3 segundos máximo**: Previene bloqueo de hilos
-- ✅ **Resolución asíncrona**: No bloquea el servidor
-- ✅ **Error 502 informativo**: Cliente sabe que fue timeout DNS
-
-### **7. Imagen Docker Segura**
-- ✅ **Distroless base**: Imagen mínima sin shells ni herramientas
-- ✅ **Non-root user**: Contenedor ejecuta como usuario no-root
-- ✅ **Sin build tools**: Stage final sin compiladores
-- ✅ **Capabilities limitadas**: Contenedor con permisos mínimos
+### **6. Imagen Docker Segura**
+- ✅ **Multi-stage build**: Entorno de compilación aislado sin herramientas en el runtime
+- ✅ **Non-root user**: Contenedor ejecuta bajo el usuario sin privilegios `appuser` (UID 1000)
+- ✅ **Health check integrado**: Monitoreo continuo mediante `curl` en `/health`
 
 ## 🔒 **Configuración de Seguridad por Entorno**
 

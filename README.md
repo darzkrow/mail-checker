@@ -59,6 +59,7 @@ Toda la documentación detallada se encuentra estandarizada en la carpeta [`docs
 
 - 📖 **[Referencia de API](docs/API_REFERENCE.md)**: Detalle completo de endpoints, cabeceras, requests y responses JSON.
 - 🚦 **[Códigos de Error](docs/ERROR_CODES.md)**: Catálogo de errores (400, 401, 413, 429, 502, 500) y cómo interpretarlos.
+- 📜 **[Registro de Parches y Mejoras Lógicas](docs/CHANGELOG_PATCHES.md)**: Bitácora detallada de correcciones de auditoría y cumplimiento de RFCs.
 - 🐳 **[Guía de Despliegue y Pruebas](docs/DEPLOYMENT.md)**: Construcción, comandos Docker Compose, pruebas y entornos.
 - 🛡️ **[Seguridad y Hardening](docs/SECURITY.md)**: Políticas de autenticación, límites de payload, rate limiting y CORS.
 - 🪟 **[Instalación en Windows](docs/SETUP_WINDOWS.md)**: Guía paso a paso para entornos Windows con Docker Desktop.

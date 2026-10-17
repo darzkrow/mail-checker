@@ -26,7 +26,9 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd -m -u 1000 appuser
+    && useradd -m -u 1000 appuser \
+    && mkdir -p /app/data \
+    && chown -R appuser:appuser /app
 
 # Copiar el binario compilado
 COPY --from=builder --chown=appuser:appuser /app/target/release/email-validator .
@@ -35,6 +37,8 @@ COPY --from=builder --chown=appuser:appuser /app/target/release/email-validator 
 RUN chmod +x ./email-validator
 
 USER appuser
+
+ENV DATA_DIR=/app/data
 
 EXPOSE 3000
 

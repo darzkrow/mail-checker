@@ -1,46 +1,104 @@
 # 📋 Códigos de Error - Email Validator API
 
+## 🔢 **Catálogo de Códigos de Error Numéricos (`error_code`) para Mapping**
+
+Para evitar el análisis frágil de cadenas de texto (`reason` o `error`), la API proporciona un identificador numérico estandarizado **`error_code`** en todas las respuestas JSON:
+
+```json
+{
+  "email": "usuario@ejemplo.com",
+  "is_valid_syntax": true,
+  "has_mx_records": true,
+  "is_deliverable": true,
+  "error_code": 0,
+  "reason": "Correo válido y con registros MX encontrados"
+}
+```
+
+### **Tabla de Mapeo Directo para Clientes**
+
+| `error_code` | Constante | HTTP Status | Categoría | Descripción / Causa | Acción recomendada del cliente |
+|:---:|---|:---:|:---:|---|---|
+| **`0`** | `ERR_SUCCESS` | `200 OK` | Éxito | Correo válido y con registros MX encontrados | Correo listo para envíos / registro aprobado |
+| **`1`** | `ERR_UNKNOWN` | `500 Internal Server Error` | Servidor | Error de servidor no categorizado | Reintentar la petición |
+| **`2`** | `ERR_INVALID_SYNTAX` | `200 OK` / `400 Bad Request` | Validación | Sintaxis incorrecta (RFC 5321/5322) | Solicitar al usuario que verifique su dirección |
+| **`3`** | `ERR_NO_MX_RECORDS` | `200 OK` | Validación | Dominio sin servidores MX ni fallback SMTP | Correo no entregable (dominio inexistente o sin email) |
+| **`4`** | `ERR_NULL_MX_REJECTED` | `200 OK` | Validación | Dominio con Null MX explícito (RFC 7505) | Dominio rechaza correos explícitamente |
+| **`5`** | `ERR_DNS_ERROR` | `200 OK` / `502 Bad Gateway` | Red/DNS | Fallo de red o timeout en servidor DNS | Reintentar en unos segundos |
+| **`6`** | `ERR_UNAUTHORIZED` | `401 Unauthorized` | Auth | API Key ausente, incorrecta o expirada | Renovar credencial en header `X-API-Key` |
+| **`7`** | `ERR_RATE_LIMITED` | `429 Too Many Requests` | Límites | Límite de peticiones/segundo excedido | Pausar peticiones / backoff exponencial |
+| **`8`** | `ERR_PAYLOAD_TOO_LARGE`| `413 Payload Too Large` | Validación | Cuerpo de petición mayor a 2KB | Reducir tamaño del JSON enviado |
+
+### **Ejemplo de Implementación de Mapping en el Cliente (JavaScript / TypeScript)**
+
+```javascript
+const response = await fetch('http://localhost:3000/api/v1/validate-email', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': process.env.API_KEY
+  },
+  body: JSON.stringify({ email: userEmail })
+});
+
+const data = await response.json();
+
+switch (data.error_code) {
+  case 0:
+    // Correo verificado con éxito
+    console.log("Email válido y entregable");
+    break;
+  case 2:
+    showError("La dirección tiene errores de escritura o formato inválido.");
+    break;
+  case 3:
+  case 4:
+    showError("El dominio no posee buzón de correo electrónico activo.");
+    break;
+  case 5:
+    showWarning("No se pudo contactar a los servidores DNS. Reintentando...");
+    break;
+  case 6:
+    console.error("Error de autenticación con la API de validación.");
+    break;
+  case 7:
+    console.warn("Límite de solicitudes alcanzado. Espere un momento.");
+    break;
+  default:
+    console.error(`Error no clasificado (${data.error_code}): ${data.reason || data.error}`);
+}
+```
+
+---
+
 ## 📊 **Resumen de Códigos HTTP**
 
 | Código | Nombre | Descripción |
 |--------|--------|-------------|
-| **200** | OK | Validación exitosa |
-| **400** | Bad Request | Error de sintaxis o validación |
-| **401** | Unauthorized | Faltan credenciales o API Key inválida |
+| **200** | OK | Validación procesada con éxito (incluye resultados válidos y con sintaxis inválida) |
+| **400** | Bad Request | Formato JSON malformado o solicitud inválida |
+| **401** | Unauthorized | Faltan credenciales, API Key inválida o expirada |
 | **413** | Payload Too Large | Payload excede el límite de 2KB |
-| **429** | Too Many Requests | Rate limit excedido |
-| **502** | Bad Gateway | Error en resolución DNS |
+| **429** | Too Many Requests | Rate limit excedido (configurable vía RATE_LIMIT_QPS) |
+| **502** | Bad Gateway | Error irrecuperable en resolución DNS |
 | **500** | Internal Server Error | Error interno del sistema |
 
 ## 🔍 **Errores 4xx - Errores del Cliente**
 
 ### **400 Bad Request**
 
+> **Nota:** La validación de sintaxis de un correo devuelve **200 OK** con `is_valid_syntax: false` y el motivo en el campo `reason`. El código **400 Bad Request** solo se genera si el cliente envía un JSON inválido, campos de tipo incompatible o un payload vacío.
+
 **Causas:**
-- Formato JSON inválido
-- Campo `email` ausente o vacío
-- Errores de validación de sintaxis
+- Formato JSON malformado o no parseable
+- Payload HTTP vacío o sin el campo requerido `"email"`
 
 **Ejemplo de respuesta:**
 ```json
 {
-  "error": "Correo electrónico inválido: El correo debe tener exactamente un '@'",
-  "status": 400
+  "error": "Failed to parse the request body as JSON"
 }
 ```
-
-**Sub-errores específicos:**
-1. `El correo no puede estar vacío`
-2. `El correo debe tener exactamente un '@'`
-3. `La parte local del correo no puede estar vacía`
-4. `La parte local no puede empezar ni terminar con '.'`
-5. `La parte local no puede tener '.' consecutivos`
-6. `La parte local no puede contener espacios`
-7. `El dominio no puede estar vacío`
-8. `El dominio debe tener al menos un '.'`
-9. `El dominio no puede empezar ni terminar con '.' o '-'`
-10. `El dominio no puede tener '-' consecutivos`
-11. `Caracter no ASCII imprimible: <carácter>`
 
 ### **401 Unauthorized**
 

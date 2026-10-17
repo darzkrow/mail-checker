@@ -59,36 +59,57 @@ X-API-Key: <tu-api-key>
 }
 ```
 
-**Respuesta exitosa (200):**
+**Respuesta exitosa - Correo válido y entregable (200 OK):**
 ```json
 {
   "email": "usuario@dominio.com",
   "is_valid_syntax": true,
   "has_mx_records": true,
   "is_deliverable": true,
+  "error_code": 0,
   "reason": "Correo válido y con registros MX encontrados"
 }
 ```
 
-**Respuesta con error de sintaxis (400):**
+**Respuesta con sintaxis inválida (200 OK):**
+> *En una API REST de validación, un correo con error sintáctico es un resultado evaluado exitosamente por el servicio y retorna `error_code: 2` para mapping directo.*
 ```json
 {
   "email": "usuario.sin-arroba.com",
   "is_valid_syntax": false,
   "has_mx_records": false,
   "is_deliverable": false,
-  "reason": "Formato de correo inválido"
+  "error_code": 2,
+  "reason": "Formato de correo inválido: falta el carácter separador '@'"
 }
 ```
 
-**Respuesta sin registros MX (200):**
+**Respuesta con sintaxis válida pero dominio sin correo o Null MX (200 OK):**
 ```json
 {
-  "email": "usuario@dominio-inexistente.com",
+  "email": "usuario@dominio-sin-mx.com",
   "is_valid_syntax": true,
   "has_mx_records": false,
   "is_deliverable": false,
-  "reason": "El dominio no tiene registros MX, el correo no es entregable"
+  "error_code": 3,
+  "reason": "El dominio no posee servidores de correo (registros MX) ni host resoluble"
+}
+```
+
+**Respuesta de error de solicitud del cliente (400 Bad Request):**
+> *Ocurre si el payload JSON está malformado o el cuerpo está vacío.*
+```json
+{
+  "error": "Failed to parse the request body as JSON",
+  "error_code": 2
+}
+```
+
+**Respuesta de autenticación rechazada (401 Unauthorized):**
+```json
+{
+  "error": "Falta el header X-API-Key o es inválido",
+  "error_code": 6
 }
 ```
 
@@ -97,29 +118,35 @@ X-API-Key: <tu-api-key>
 ### **Parámetros del Request**
 
 | Campo | Tipo | Requerido | Descripción | Ejemplo |
-|-------|------|-----------|-------------|---------|
+|---|---|---|---|---|
 | `email` | string | ✅ | Dirección de correo a validar | `"usuario@gmail.com"` |
 
 ### **Campos de Respuesta**
 
 | Campo | Tipo | Descripción |
-|-------|------|-------------|
+|---|---|---|
 | `email` | string | Dirección de correo validada |
-| `is_valid_syntax` | boolean | `true` si la sintaxis es válida |
-| `has_mx_records` | boolean | `true` si el dominio tiene registros MX |
-| `is_deliverable` | boolean | `true` si ambas validaciones pasan |
+| `is_valid_syntax` | boolean | `true` si la sintaxis cumple con RFC 5321 / RFC 5322 |
+| `has_mx_records` | boolean | `true` si el dominio tiene servidores de correo activos |
+| `is_deliverable` | boolean | `true` si cumple sintaxis y servidores MX operativos |
+| `error_code` | integer | Código numérico entero para **mapping directo** de estados y errores |
 | `reason` | string | Explicación detallada del resultado |
 
 ---
 
-### **Valores posibles de `reason`:**
+### 🔢 **Catálogo de Códigos de Error (`error_code`) para Mapping Directo**
 
-| Valor | Significado |
-|-------|-------------|
-| `"Correo válido y con registros MX encontrados"` | Validación exitosa |
-| `"Formato de correo inválido"` | Error de sintaxis |
-| `"El dominio no tiene registros MX, el correo no es entregable"` | Dominio sin MX |
-| `"Error en la resolución DNS: <detalle>"` | Error DNS específico |
+| `error_code` | Constante | HTTP Status | Causa | Acción recomendada del cliente |
+|:---:|---|:---:|---|---|
+| **`0`** | `ERR_SUCCESS` | `200 OK` | Correo válido y con registros MX encontrados | Correo listo para envíos / registro aprobado |
+| **`1`** | `ERR_UNKNOWN` | `500 Internal Server Error` | Error de servidor no categorizado | Reintentar la petición |
+| **`2`** | `ERR_INVALID_SYNTAX` | `200 OK` / `400 Bad Request` | Sintaxis incorrecta (RFC 5321/5322) | Solicitar al usuario que verifique su dirección |
+| **`3`** | `ERR_NO_MX_RECORDS` | `200 OK` | Dominio sin servidores MX ni fallback SMTP | Correo no entregable (dominio inexistente o sin email) |
+| **`4`** | `ERR_NULL_MX_REJECTED` | `200 OK` | Dominio con Null MX explícito (RFC 7505) | Dominio rechaza correos explícitamente |
+| **`5`** | `ERR_DNS_ERROR` | `200 OK` / `502 Bad Gateway` | Fallo de red o timeout en servidor DNS | Reintentar en unos segundos |
+| **`6`** | `ERR_UNAUTHORIZED` | `401 Unauthorized` | API Key ausente, incorrecta o expirada | Renovar credencial en header `X-API-Key` |
+| **`7`** | `ERR_RATE_LIMITED` | `429 Too Many Requests` | Límite de peticiones/segundo excedido | Pausar peticiones / backoff exponencial |
+| **`8`** | `ERR_PAYLOAD_TOO_LARGE`| `413 Payload Too Large` | Cuerpo de petición mayor a 2KB | Reducir tamaño del JSON enviado |
 
 ## 🛠️ **Ejemplos de Uso**
 
@@ -401,6 +428,51 @@ async function validateEmail(email) {
 - Implementar reintentos con backoff exponencial
 - No reintentar en errores 4xx (excepto 429)
 - Límite de reintentos: 3-5 veces
+
+## 🛡️ **Endpoints Administrativos y Métricas Operativas**
+
+Todos los endpoints administrativos requieren autenticación mediante cabecera `Authorization: Basic <base64(usuario:contraseña)>`.
+
+### **GET /api/v1/admin/metrics**
+
+Retorna los indicadores clave de rendimiento (KPIs) de salud y tráfico de la API, junto con el ranking de dominios problemáticos más recurrentes detectados en las solicitudes recibidas.
+
+**Headers:**
+```http
+Authorization: Basic QWRtaW5pc3RyYXRvcjphZG1pbjEyMzQ1
+```
+
+**Respuesta Exitosa (200 OK):**
+```json
+{
+  "total_requests": 1420,
+  "processed_validations": 1395,
+  "api_success_rate": 100.0,
+  "average_latency_ms": 148.5,
+  "auth_failures": 25,
+  "rate_limit_hits": 0,
+  "syntax_errors": 180,
+  "no_mx_count": 95,
+  "dns_errors": 2,
+  "uptime_seconds": 86400,
+  "top_problematic_domains": [
+    {
+      "domain": "gmial.com",
+      "occurrences": 42,
+      "reason": "Sin registros MX configurados o Null MX (RFC 7505)",
+      "error_category": "sin_mx"
+    },
+    {
+      "domain": "dominio..invalido.com",
+      "occurrences": 18,
+      "reason": "El dominio no puede contener puntos consecutivos (..)",
+      "error_category": "sintaxis"
+    }
+  ]
+}
+```
+
+---
 
 ## 🔄 **Versioning de API**
 

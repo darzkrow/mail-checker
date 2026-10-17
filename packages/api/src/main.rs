@@ -12,26 +12,77 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use dns::resolve_mx_records;
+use dns::{resolve_mx_records, DnsResolutionResult};
 use hickory_resolver::TokioAsyncResolver;
 use key_manager::{KeyManager, KeyValidationResult};
 use log_buffer::{LogBuffer, LogLayer};
 use serde::Deserialize;
 use serde_json::json;
 use shared::{
-    ApiKeyRecord, AppConfig, AtomicMetrics, EmailValidationResponse, MetricsSnapshot, PasswordPolicy, AdminPasswordHash,
-    ValidationError,
+    error_codes, AdminPasswordHash, ApiKeyRecord, AppConfig, AtomicMetrics, DomainTracker,
+    EmailValidationResponse, MetricsSnapshot, PasswordPolicy, ValidationError,
 };
 use std::{
+    collections::HashMap,
     net::SocketAddr,
-    sync::{atomic::Ordering, Arc},
+    sync::{atomic::Ordering, Arc, Mutex},
     time::Instant,
 };
 use tokio::net::TcpListener;
+use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use validation::{format_response, validate_email_syntax};
+use validation::{format_response, format_response_custom, validate_email_syntax};
+
+// ==================== RATE LIMITER EN MEMORIA ====================
+
+#[derive(Debug)]
+pub struct RateLimiter {
+    qps: u32,
+    buckets: Mutex<HashMap<String, (u64, u32)>>,
+}
+
+impl RateLimiter {
+    pub fn new(qps: u32) -> Self {
+        Self {
+            qps,
+            buckets: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Verificar si la clave excede el límite de solicitudes por segundo (QPS)
+    pub fn check(&self, key: &str) -> bool {
+        if self.qps == 0 {
+            return true;
+        }
+        let now_sec = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        if let Ok(mut map) = self.buckets.lock() {
+            let entry = map.entry(key.to_string()).or_insert((now_sec, 0));
+            if entry.0 == now_sec {
+                if entry.1 >= self.qps {
+                    return false;
+                }
+                entry.1 += 1;
+            } else {
+                entry.0 = now_sec;
+                entry.1 = 1;
+            }
+
+            // Mantenimiento periódico de memoria si el mapa crece
+            if map.len() > 5000 {
+                map.retain(|_, (sec, _)| now_sec.saturating_sub(*sec) < 60);
+            }
+            true
+        } else {
+            true
+        }
+    }
+}
 
 // ==================== ERRORES ====================
 
@@ -48,31 +99,52 @@ impl From<ValidationError> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let (status, error_msg) = match self {
-            ApiError::Validation(ValidationError::InvalidEmail(msg)) => (StatusCode::BAD_REQUEST, msg),
+        let (status, err_code, error_msg) = match self {
+            ApiError::Validation(ValidationError::InvalidEmail(msg)) => (
+                StatusCode::BAD_REQUEST,
+                error_codes::ERR_INVALID_SYNTAX,
+                msg,
+            ),
             ApiError::Validation(ValidationError::InvalidApiKey) => (
                 StatusCode::UNAUTHORIZED,
+                error_codes::ERR_UNAUTHORIZED,
                 "Falta el header X-API-Key o es inválido".to_string(),
             ),
             ApiError::Validation(ValidationError::ExpiredApiKey) => (
                 StatusCode::UNAUTHORIZED,
+                error_codes::ERR_UNAUTHORIZED,
                 "La API Key proporcionada ha expirado. Contacte al administrador.".to_string(),
             ),
             ApiError::Validation(ValidationError::RateLimitExceeded) => (
                 StatusCode::TOO_MANY_REQUESTS,
+                error_codes::ERR_RATE_LIMITED,
                 "Rate limit excedido. Intente más tarde.".to_string(),
             ),
             ApiError::Validation(ValidationError::PayloadTooLarge) => (
                 StatusCode::PAYLOAD_TOO_LARGE,
+                error_codes::ERR_PAYLOAD_TOO_LARGE,
                 "Payload demasiado grande. Máximo 2KB permitidos.".to_string(),
             ),
-            ApiError::Validation(ValidationError::DnsError(msg)) => (StatusCode::BAD_GATEWAY, msg),
-            ApiError::Validation(ValidationError::InternalError(msg)) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg)
-            }
+            ApiError::Validation(ValidationError::DnsError(msg)) => (
+                StatusCode::BAD_GATEWAY,
+                error_codes::ERR_DNS_ERROR,
+                msg,
+            ),
+            ApiError::Validation(ValidationError::InternalError(msg)) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                error_codes::ERR_UNKNOWN,
+                msg,
+            ),
         };
 
-        (status, Json(json!({ "error": error_msg }))).into_response()
+        (
+            status,
+            Json(json!({
+                "error": error_msg,
+                "error_code": err_code
+            })),
+        )
+            .into_response()
     }
 }
 
@@ -99,55 +171,36 @@ struct ChangePasswordRequest {
 #[derive(Clone)]
 struct AppState {
     config: Arc<AppConfig>,
+    admin_auth: Arc<RwLock<AdminPasswordHash>>,
     resolver: TokioAsyncResolver,
     key_manager: Arc<KeyManager>,
+    rate_limiter: Arc<RateLimiter>,
     metrics: Arc<AtomicMetrics>,
+    domain_tracker: Arc<DomainTracker>,
     log_buffer: LogBuffer,
     start_time: Instant,
 }
 
 // ==================== VERIFICACIÓN DE CREDENCIALES ADMIN ====================
 
-fn check_admin_auth(headers: &HeaderMap, state: &AppState) -> bool {
+async fn check_admin_auth(headers: &HeaderMap, state: &AppState) -> bool {
+    use base64::Engine;
     if let Some(auth_header) = headers.get("Authorization").and_then(|h| h.to_str().ok()) {
         if let Some(base64_part) = auth_header.strip_prefix("Basic ") {
-            use std::io::Read;
-            // Decodificación base64 manual/segura
-            if let Ok(decoded) = base64_decode(base64_part) {
+            if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(base64_part.trim()) {
                 if let Ok(cred_str) = String::from_utf8(decoded) {
                     let parts: Vec<&str> = cred_str.splitn(2, ':').collect();
                     if parts.len() == 2 {
                         let user = parts[0];
                         let pass = parts[1];
-                        return user == state.config.admin_user && state.config.verify_admin_password(&pass);
+                        let hash = state.admin_auth.read().await;
+                        return user == state.config.admin_user && hash.verify(pass);
                     }
                 }
             }
         }
     }
     false
-}
-
-fn base64_decode(input: &str) -> Result<Vec<u8>, ()> {
-    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let input = input.trim().as_bytes();
-    let mut out = Vec::new();
-    let mut buf = 0u32;
-    let mut bits = 0;
-
-    for &b in input {
-        if b == b'=' {
-            break;
-        }
-        let val = TABLE.iter().position(|&c| c == b).ok_or(())? as u32;
-        buf = (buf << 6) | val;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((buf >> bits) as u8);
-        }
-    }
-    Ok(out)
 }
 
 // ==================== HANDLERS API PÚBLICA ====================
@@ -158,6 +211,9 @@ async fn validate_email_handler(
     Json(payload): Json<EmailRequest>,
 ) -> Result<(StatusCode, Json<EmailValidationResponse>), ApiError> {
     let timer = Instant::now();
+
+    // Contabilizar toda llamada recibida en la API
+    state.metrics.record_request();
 
     // 1. Validar autenticación de API Key
     let api_key = headers
@@ -180,28 +236,76 @@ async fn validate_email_handler(
         }
     }
 
+    // 2. Control de flujo / Rate Limiting por clave
+    if !state.rate_limiter.check(api_key) {
+        state.metrics.record_rate_limit_hit();
+        return Err(ValidationError::RateLimitExceeded.into());
+    }
+
     // Registrar uso para la clave
     state.key_manager.increment_usage(api_key).await;
 
     let email = payload.email.trim().to_string();
 
-    // 2. Validar sintaxis (RFC 5322)
+    // 3. Validar sintaxis (RFC 5321 y RFC 5322)
     if let Err(err) = validate_email_syntax(&email) {
         state.metrics.record_syntax_error();
-        return Err(err.into());
+        let reason = match err {
+            ValidationError::InvalidEmail(msg) => msg,
+            _ => "Formato de correo inválido".to_string(),
+        };
+
+        // Rastrear dominio mal escrito o inválido
+        let domain_guess = email.split('@').nth(1).unwrap_or("dominio_malformado");
+        state.domain_tracker.record(domain_guess, &reason, "sintaxis");
+
+        let response = EmailValidationResponse {
+            email,
+            is_valid_syntax: false,
+            has_mx_records: false,
+            is_deliverable: false,
+            error_code: error_codes::ERR_INVALID_SYNTAX,
+            reason,
+        };
+        return Ok((StatusCode::OK, Json(response)));
     }
 
-    // 3. Resolución DNS MX asíncrona
-    let domain = email.split('@').last().unwrap_or("");
-    let has_mx = resolve_mx_records(&state.resolver, domain).await?;
+    // 4. Resolución DNS MX asíncrona (con detección de Null MX y fallback SMTP A/AAAA)
+    let domain = email.split('@').nth(1).unwrap_or("");
+    let (has_mx, error_code, custom_reason) = match resolve_mx_records(&state.resolver, domain).await {
+        Ok(DnsResolutionResult::ValidMx) => {
+            (true, error_codes::ERR_SUCCESS, None)
+        }
+        Ok(DnsResolutionResult::NullMx) => {
+            state.domain_tracker.record(domain, "Dominio con Null MX explícito según RFC 7505 (no acepta correos)", "sin_mx");
+            (false, error_codes::ERR_NULL_MX_REJECTED, Some("El dominio declara explícitamente que no acepta correo electrónico (Null MX según RFC 7505)".to_string()))
+        }
+        Ok(DnsResolutionResult::NoRecords) => {
+            state.domain_tracker.record(domain, "Sin servidores de correo ni host resoluble", "sin_mx");
+            (false, error_codes::ERR_NO_MX_RECORDS, Some("El dominio no posee servidores de correo (registros MX) ni host resoluble".to_string()))
+        }
+        Err(ValidationError::DnsError(msg)) => {
+            state.metrics.record_dns_error();
+            state.domain_tracker.record(domain, &format!("Fallo DNS: {}", msg), "dns_fallo");
+            (false, error_codes::ERR_DNS_ERROR, Some(format!("Sintaxis válida, pero no fue posible contactar con los servidores DNS: {}", msg)))
+        }
+        Err(err) => {
+            state.metrics.record_internal_error();
+            return Err(err.into());
+        }
+    };
 
     let elapsed = timer.elapsed().as_millis() as u64;
-    state.metrics.record_success(has_mx, elapsed);
+    state.metrics.record_processed(has_mx, elapsed);
 
-    info!("Validación completada para {}: MX={} ({}ms)", domain, has_mx, elapsed);
+    info!("Validación completada para {}: MX={} (código={}, {}ms)", domain, has_mx, error_code, elapsed);
 
-    // 4. Formatear y construir respuesta
-    let response = format_response(email, true, has_mx);
+    // 5. Formatear y construir respuesta coherente con código numérico para mapeo
+    let response = if let Some(reason) = custom_reason {
+        format_response_custom(email, true, false, error_code, reason)
+    } else {
+        format_response(email, true, has_mx, error_code)
+    };
 
     Ok((StatusCode::OK, Json(response)))
 }
@@ -220,7 +324,7 @@ async fn admin_login_check(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<StatusCode, StatusCode> {
-    if check_admin_auth(&headers, &state) {
+    if check_admin_auth(&headers, &state).await {
         Ok(StatusCode::OK)
     } else {
         Err(StatusCode::UNAUTHORIZED)
@@ -231,42 +335,50 @@ async fn get_metrics_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<MetricsSnapshot>, StatusCode> {
-    if !check_admin_auth(&headers, &state) {
+    if !check_admin_auth(&headers, &state).await {
         return Err(StatusCode::UNAUTHORIZED);
     }
 
     let total = state.metrics.total_requests.load(Ordering::Relaxed);
-    let success = state.metrics.successful_validations.load(Ordering::Relaxed);
-    let deliverable = state.metrics.deliverable_count.load(Ordering::Relaxed);
-    let non_deliverable = state.metrics.non_deliverable_count.load(Ordering::Relaxed);
-    let syntax_err = state.metrics.invalid_syntax_count.load(Ordering::Relaxed);
+    let processed = state.metrics.processed_validations.load(Ordering::Relaxed);
     let auth_fail = state.metrics.auth_failures.load(Ordering::Relaxed);
+    let rate_hits = state.metrics.rate_limit_hits.load(Ordering::Relaxed);
+    let syntax_err = state.metrics.syntax_errors.load(Ordering::Relaxed);
+    let no_mx = state.metrics.no_mx_count.load(Ordering::Relaxed);
+    let dns_err = state.metrics.dns_errors.load(Ordering::Relaxed);
+    let internal_err = state.metrics.internal_errors.load(Ordering::Relaxed);
     let total_lat = state.metrics.total_latency_ms.load(Ordering::Relaxed);
 
-    let deliverability_rate = if success > 0 {
-        (deliverable as f64 / success as f64) * 100.0
+    // Tasa de éxito operativo: % de llamadas recibidas que la API logró atender y procesar sin fallos internos
+    let api_success_rate = if total > 0 {
+        let server_failures = internal_err;
+        let correctly_handled = total.saturating_sub(server_failures);
+        (correctly_handled as f64 / total as f64) * 100.0
     } else {
-        0.0
+        100.0
     };
 
-    let average_latency_ms = if success > 0 {
-        total_lat as f64 / success as f64
+    let average_latency_ms = if processed > 0 {
+        total_lat as f64 / processed as f64
     } else {
         0.0
     };
 
     let uptime_seconds = state.start_time.elapsed().as_secs();
+    let top_problematic_domains = state.domain_tracker.get_top(20);
 
     Ok(Json(MetricsSnapshot {
         total_requests: total,
-        successful_validations: success,
-        deliverable_count: deliverable,
-        non_deliverable_count: non_deliverable,
-        invalid_syntax_count: syntax_err,
-        auth_failures: auth_fail,
-        deliverability_rate,
+        processed_validations: processed,
+        api_success_rate,
         average_latency_ms,
+        auth_failures: auth_fail,
+        rate_limit_hits: rate_hits,
+        syntax_errors: syntax_err,
+        no_mx_count: no_mx,
+        dns_errors: dns_err,
         uptime_seconds,
+        top_problematic_domains,
     }))
 }
 
@@ -274,7 +386,7 @@ async fn list_keys_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<ApiKeyRecord>>, StatusCode> {
-    if !check_admin_auth(&headers, &state) {
+    if !check_admin_auth(&headers, &state).await {
         return Err(StatusCode::UNAUTHORIZED);
     }
     let keys = state.key_manager.list_keys().await;
@@ -286,7 +398,7 @@ async fn create_key_handler(
     headers: HeaderMap,
     Json(payload): Json<CreateKeyRequest>,
 ) -> Result<(StatusCode, Json<ApiKeyRecord>), StatusCode> {
-    if !check_admin_auth(&headers, &state) {
+    if !check_admin_auth(&headers, &state).await {
         return Err(StatusCode::UNAUTHORIZED);
     }
     let new_key = state
@@ -305,7 +417,7 @@ async fn toggle_key_handler(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<ApiKeyRecord>, StatusCode> {
-    if !check_admin_auth(&headers, &state) {
+    if !check_admin_auth(&headers, &state).await {
         return Err(StatusCode::UNAUTHORIZED);
     }
     state
@@ -321,7 +433,7 @@ async fn delete_key_handler(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> StatusCode {
-    if !check_admin_auth(&headers, &state) {
+    if !check_admin_auth(&headers, &state).await {
         return StatusCode::UNAUTHORIZED;
     }
     if state.key_manager.delete_key(&id).await {
@@ -336,7 +448,7 @@ async fn change_password_handler(
     headers: HeaderMap,
     Json(payload): Json<ChangePasswordRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    if !check_admin_auth(&headers, &state) {
+    if !check_admin_auth(&headers, &state).await {
         return Err(StatusCode::UNAUTHORIZED);
     }
 
@@ -344,10 +456,7 @@ async fn change_password_handler(
     let policy = PasswordPolicy::default();
     let new_password = &payload.new_password;
 
-    if new_password.len() < policy.min_length {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-    if new_password.len() > policy.max_length {
+    if new_password.len() < policy.min_length || new_password.len() > policy.max_length {
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -365,16 +474,22 @@ async fn change_password_handler(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // Generar nuevo hash
+    // Generar nuevo hash con sal aleatoria
     let new_hash = AdminPasswordHash::new(new_password);
 
-    // Actualizar config (Arc clone, así que necesitamos mutar...)
-    // Para simplificar, actualizamos el env y el state
-    // En un entorno real usaríamos una base de datos o archivo de configuración
-    drop(state); // evitar préstamo mutuo
+    // 1. Actualizar estado en memoria de forma inmediata
+    {
+        let mut auth_lock = state.admin_auth.write().await;
+        *auth_lock = new_hash.clone();
+    }
 
-    // Por ahora, respondemos exitosamente y el admin debe reiniciar con las nuevas credenciales
-    // TODO: Persistir el nuevo hash en el archivo .env o en almacenamiento persistente
+    // 2. Persistir el nuevo hash en disco (data/admin_auth.json)
+    if let Err(e) = state.config.save_admin_auth(&state.config.admin_user, new_hash) {
+        tracing::warn!("Advertencia: no se pudo persistir el hash de admin en disco: {}. Estará activo en memoria.", e);
+    } else {
+        info!("Contraseña de administrador actualizada y persistida en disco exitosamente");
+    }
+
     Ok(StatusCode::OK)
 }
 
@@ -382,7 +497,7 @@ async fn get_logs_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<log_buffer::LogEntry>>, StatusCode> {
-    if !check_admin_auth(&headers, &state) {
+    if !check_admin_auth(&headers, &state).await {
         return Err(StatusCode::UNAUTHORIZED);
     }
     Ok(Json(state.log_buffer.get_recent()))
@@ -394,7 +509,7 @@ async fn openapi_spec_handler() -> Json<serde_json::Value> {
         "info": {
             "title": "Email Validator API",
             "version": "1.0.0",
-            "description": "Microservicio REST de validación de sintaxis RFC 5322 y registros MX DNS asíncronos"
+            "description": "Microservicio REST de validación de sintaxis RFC 5321/5322 y registros MX DNS asíncronos con soporte Null MX (RFC 7505) y fallback SMTP"
         },
         "paths": {
             "/api/v1/validate-email": {
@@ -419,9 +534,26 @@ async fn openapi_spec_handler() -> Json<serde_json::Value> {
                         }
                     },
                     "responses": {
-                        "200": { "description": "Resultado de la validación" },
-                        "400": { "description": "Sintaxis de email inválida" },
-                        "401": { "description": "API Key inválida, ausente o expirada" }
+                        "200": {
+                            "description": "Resultado de la validación (incluye tanto correos válidos como inválidos)",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "email": { "type": "string" },
+                                            "is_valid_syntax": { "type": "boolean" },
+                                            "has_mx_records": { "type": "boolean" },
+                                            "is_deliverable": { "type": "boolean" },
+                                            "reason": { "type": "string" }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "400": { "description": "Cuerpo de solicitud malformado o JSON inválido" },
+                        "401": { "description": "API Key inválida, ausente o expirada" },
+                        "429": { "description": "Rate limit excedido por segundo" }
                     }
                 }
             },
@@ -455,16 +587,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = Arc::new(AppConfig::from_env());
 
-    // 2. DNS Resolver y Gestor de Claves
+    // 2. Resolver DNS, Gestor de Claves y Limitador de Tasa
     let resolver = TokioAsyncResolver::tokio_from_system_conf()?;
     let key_manager = Arc::new(KeyManager::init(&config.data_dir, &config.api_key).await);
+    let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit_qps));
     let metrics = Arc::new(AtomicMetrics::new());
+    let domain_tracker = Arc::new(DomainTracker::new());
+    let admin_auth = Arc::new(RwLock::new(config.admin_password_hash.clone()));
 
     let state = Arc::new(AppState {
         config: Arc::clone(&config),
+        admin_auth,
         resolver,
         key_manager,
+        rate_limiter,
         metrics,
+        domain_tracker,
         log_buffer,
         start_time: Instant::now(),
     });
@@ -476,7 +614,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔗 URL Base: http://0.0.0.0:{}", config.port);
     println!("📊 Panel Admin: http://0.0.0.0:{}/admin", config.port);
     println!("👤 Usuario Admin: {}", config.admin_user);
-    println!("🔑 Clave Admin: ******** (hash almacenado en configuración)");
+    println!("🔑 Clave Admin: ******** (hash seguro SHA-256 + salt)");
+    println!("⚡ Rate Limit: {} QPS", config.rate_limit_qps);
     println!("📖 Swagger / OpenAPI: http://0.0.0.0:{}/api/v1/openapi.json", config.port);
     println!("📁 Directorio de Persistencia: {}", config.data_dir);
     println!("========================================");

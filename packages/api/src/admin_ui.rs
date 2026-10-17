@@ -412,49 +412,50 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
 
   <main>
     <!-- TAB 1: METRICAS -->
+    <!-- TAB 1: METRICAS OPERATIVAS & SALUD DE API -->
     <section id="tab-metrics" class="tab-content active">
       <div class="metrics-grid">
         <div class="kpi-card">
-          <div class="kpi-label">Peticiones Totales</div>
+          <div class="kpi-label">Peticiones Totales a la API</div>
           <div class="kpi-value" id="kpi-total">0</div>
-          <div class="kpi-sub">Tráfico global procesado</div>
+          <div class="kpi-sub">Volumen de tráfico global</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Tasa de Entregabilidad</div>
-          <div class="kpi-value" style="color:var(--success)" id="kpi-deliverability">0%</div>
-          <div class="kpi-sub"><span id="kpi-mx-count">0</span> con registros MX activos</div>
+          <div class="kpi-label">Tasa de Éxito de la API</div>
+          <div class="kpi-value" style="color:var(--success)" id="kpi-api-success">100%</div>
+          <div class="kpi-sub"><span id="kpi-processed">0</span> procesadas sin error de servidor</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Latencia Promedio</div>
           <div class="kpi-value" style="color:var(--accent)" id="kpi-latency">0 ms</div>
-          <div class="kpi-sub">Tiempo de resolución DNS</div>
+          <div class="kpi-sub">Tiempo medio de respuesta</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Uptime Servidor</div>
+          <div class="kpi-label">Tiempo Activo (Uptime)</div>
           <div class="kpi-value" style="color:var(--primary)" id="kpi-uptime">0s</div>
-          <div class="kpi-sub">Tiempo activo continuo</div>
+          <div class="kpi-sub">Servidor en línea continuo</div>
         </div>
       </div>
 
-      <div style="display:grid; grid-template-columns: 2fr 1fr; gap:1.5rem;">
+      <div style="display:grid; grid-template-columns: 2fr 1fr; gap:1.5rem; margin-bottom:1.5rem;">
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">Desglose de Resoluciones</h3>
+            <h3 class="card-title">Desglose Operativo de Solicitudes</h3>
             <button class="btn btn-sm" onclick="loadMetrics()">Refrescar</button>
           </div>
           <div style="display:flex; flex-direction:column; gap:1rem;">
             <div>
               <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.875rem;">
-                <span>Correos Entregables (Sintaxis OK + MX Encontrados)</span>
-                <span id="prog-deliverable-val" style="font-weight:700; color:var(--success)">0</span>
+                <span>Correos con Sintaxis Inválida (Errores del Cliente)</span>
+                <span id="prog-syntax-val" style="font-weight:700; color:var(--danger)">0</span>
               </div>
               <div style="background:rgba(255,255,255,0.05); height:8px; border-radius:4px; overflow:hidden;">
-                <div id="prog-deliverable-bar" style="background:var(--success); width:0%; height:100%;"></div>
+                <div id="prog-syntax-bar" style="background:var(--danger); width:0%; height:100%;"></div>
               </div>
             </div>
             <div>
               <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.875rem;">
-                <span>Sin Registros MX (No Entregables)</span>
+                <span>Dominios sin Servidor MX / Null MX (Rechazo)</span>
                 <span id="prog-nomx-val" style="font-weight:700; color:var(--warning)">0</span>
               </div>
               <div style="background:rgba(255,255,255,0.05); height:8px; border-radius:4px; overflow:hidden;">
@@ -463,11 +464,11 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
             </div>
             <div>
               <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; font-size:0.875rem;">
-                <span>Errores de Sintaxis RFC 5322</span>
-                <span id="prog-syntax-val" style="font-weight:700; color:var(--danger)">0</span>
+                <span>Fallos de Consulta DNS Externa (Timeouts/Red)</span>
+                <span id="prog-dns-val" style="font-weight:700; color:var(--accent)">0</span>
               </div>
               <div style="background:rgba(255,255,255,0.05); height:8px; border-radius:4px; overflow:hidden;">
-                <div id="prog-syntax-bar" style="background:var(--danger); width:0%; height:100%;"></div>
+                <div id="prog-dns-bar" style="background:var(--accent); width:0%; height:100%;"></div>
               </div>
             </div>
           </div>
@@ -475,22 +476,55 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
 
         <div class="card">
           <div class="card-header">
-            <h3 class="card-title">Seguridad & Tráfico</h3>
+            <h3 class="card-title">Seguridad & Límites</h3>
           </div>
           <div style="display:flex; flex-direction:column; gap:0.75rem;">
             <div style="display:flex; justify-content:space-between; padding:0.5rem 0; border-bottom:1px solid rgba(255,255,255,0.05);">
-              <span style="color:var(--text-muted)">Fallos de Autenticación</span>
+              <span style="color:var(--text-muted)">Rechazos por Autenticación (401)</span>
               <span id="kpi-auth-fails" style="font-weight:700; color:var(--danger)">0</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:0.5rem 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+              <span style="color:var(--text-muted)">Bloqueos por Rate Limit (429)</span>
+              <span id="kpi-rate-hits" style="font-weight:700; color:var(--warning)">0</span>
             </div>
             <div style="display:flex; justify-content:space-between; padding:0.5rem 0; border-bottom:1px solid rgba(255,255,255,0.05);">
               <span style="color:var(--text-muted)">Límite de Payload</span>
               <span style="font-weight:700;">2 KB (Activo)</span>
             </div>
             <div style="display:flex; justify-content:space-between; padding:0.5rem 0;">
-              <span style="color:var(--text-muted)">Almacén Persistente</span>
-              <span class="badge badge-info">data/keys.json</span>
+              <span style="color:var(--text-muted)">Directorio de Persistencia</span>
+              <span class="badge badge-info">/app/data</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- SECCIÓN: DOMINIOS PROBLEMÁTICOS & ERRORES RECURRENTES -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <h3 class="card-title">🔍 Dominios Recurrentes Problemáticos (Top Errores de Clientes)</h3>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem;">Identificación de dominios mal escritos (typos), dominios sin servidor de correo o con fallos DNS que los usuarios envían con mayor frecuencia.</p>
+          </div>
+          <button class="btn btn-sm" onclick="loadMetrics()">Actualizar Lista</button>
+        </div>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:60px;">#</th>
+                <th>Dominio Problemático</th>
+                <th>Frecuencia (Veces Enviado)</th>
+                <th>Categoría del Error</th>
+                <th>Último Motivo / Diagnóstico</th>
+              </tr>
+            </thead>
+            <tbody id="problematicDomainsTableBody">
+              <tr>
+                <td colspan="5" style="text-align:center; color:var(--text-muted); font-style:italic;">No hay dominios con errores registrados hasta el momento.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -693,11 +727,13 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
         if (!res.ok) return;
         const d = await res.json();
 
+        // KPIs operativos principales
         document.getElementById('kpi-total').innerText = d.total_requests;
-        document.getElementById('kpi-deliverability').innerText = d.deliverability_rate.toFixed(1) + '%';
-        document.getElementById('kpi-mx-count').innerText = d.deliverable_count;
+        document.getElementById('kpi-api-success').innerText = d.api_success_rate.toFixed(1) + '%';
+        document.getElementById('kpi-processed').innerText = d.processed_validations;
         document.getElementById('kpi-latency').innerText = d.average_latency_ms.toFixed(1) + ' ms';
         document.getElementById('kpi-auth-fails').innerText = d.auth_failures;
+        document.getElementById('kpi-rate-hits').innerText = d.rate_limit_hits;
 
         // Uptime formatting
         const s = d.uptime_seconds;
@@ -705,16 +741,45 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
         const h = Math.floor(m / 60);
         document.getElementById('kpi-uptime').innerText = h > 0 ? `${h}h ${m%60}m` : `${m}m ${s%60}s`;
 
-        // Bars
-        const total = d.successful_validations + d.invalid_syntax_count || 1;
-        document.getElementById('prog-deliverable-val').innerText = d.deliverable_count;
-        document.getElementById('prog-deliverable-bar').style.width = ((d.deliverable_count / total) * 100) + '%';
+        // Barras de desglose
+        const total = d.total_requests || 1;
+        document.getElementById('prog-syntax-val').innerText = d.syntax_errors;
+        document.getElementById('prog-syntax-bar').style.width = ((d.syntax_errors / total) * 100) + '%';
 
-        document.getElementById('prog-nomx-val').innerText = d.non_deliverable_count;
-        document.getElementById('prog-nomx-bar').style.width = ((d.non_deliverable_count / total) * 100) + '%';
+        document.getElementById('prog-nomx-val').innerText = d.no_mx_count;
+        document.getElementById('prog-nomx-bar').style.width = ((d.no_mx_count / total) * 100) + '%';
 
-        document.getElementById('prog-syntax-val').innerText = d.invalid_syntax_count;
-        document.getElementById('prog-syntax-bar').style.width = ((d.invalid_syntax_count / total) * 100) + '%';
+        document.getElementById('prog-dns-val').innerText = d.dns_errors;
+        document.getElementById('prog-dns-bar').style.width = ((d.dns_errors / total) * 100) + '%';
+
+        // Renderizar tabla de dominios problemáticos
+        const domainTbody = document.getElementById('problematicDomainsTableBody');
+        domainTbody.innerHTML = '';
+
+        if (!d.top_problematic_domains || d.top_problematic_domains.length === 0) {
+          domainTbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); font-style:italic;">No hay dominios con errores registrados hasta el momento.</td></tr>';
+        } else {
+          d.top_problematic_domains.forEach((item, index) => {
+            const tr = document.createElement('tr');
+            let catBadge = '';
+            if (item.error_category === 'sintaxis') {
+              catBadge = '<span class="badge badge-danger">Sintaxis Inválida</span>';
+            } else if (item.error_category === 'sin_mx') {
+              catBadge = '<span class="badge badge-warning">Sin Servidor MX</span>';
+            } else {
+              catBadge = '<span class="badge badge-info">Fallo DNS</span>';
+            }
+
+            tr.innerHTML = `
+              <td><strong>#${index + 1}</strong></td>
+              <td><code style="font-family:var(--font-mono); color:var(--accent); font-weight:700;">${item.domain}</code></td>
+              <td><span class="badge badge-info" style="font-family:var(--font-mono);">${item.occurrences} peticiones</span></td>
+              <td>${catBadge}</td>
+              <td style="font-size:0.8rem; color:var(--text-muted);">${item.reason}</td>
+            `;
+            domainTbody.appendChild(tr);
+          });
+        }
       } catch (e) {
         console.error('Error cargando métricas:', e);
       }
@@ -732,15 +797,10 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
         const now = new Date();
 
         keys.forEach(k => {
-          # Ocultar la clave maestra del .env - no mostrar su valor por seguridad
+          // Ocultar la clave maestra del .env - no mostrar su valor por seguridad
           if (k.id === 'master-key') {
             const tr = document.createElement('tr');
-            tr.innerHTML = '''
-              <td colspan="6" style="text-align:center; color:var(--text-muted); font-style:italic;">
-                <strong>Clave Maestra</strong><br>
-                <span style="font-size:0.7rem; color:var(--text-muted);">Configurada en .env - valor no mostrado por seguridad</span>
-              </td>
-            ''';
+            tr.innerHTML = '              <td colspan="6" style="text-align:center; color:var(--text-muted); font-style:italic;"><strong>Clave Maestra</strong><br><span style="font-size:0.7rem; color:var(--text-muted);">Configurada en .env - valor no mostrado por seguridad</span></td>';
             tbody.appendChild(tr);
             return; // Skip further processing for master key
           }
@@ -748,7 +808,7 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
           const tr = document.createElement('tr');
           const isMaster = k.id === 'master-key';
 
-          # Expiration status
+          // Expiration status
           let expHtml = '<span class="badge badge-info">♾️ Eterna</span>';
           let isExpired = false;
           if (k.expires_at) {
@@ -845,7 +905,7 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
       const select = document.getElementById('testerKeySelect');
       select.innerHTML = '';
       keys.forEach(k => {
-        # Skip master key from tester selector
+        // Skip master key from tester selector
         if (k.id === 'master-key') return;
         const opt = document.createElement('option');
         opt.value = k.key;
