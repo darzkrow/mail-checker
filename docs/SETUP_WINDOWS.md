@@ -48,10 +48,10 @@ notepad .env
 API_KEY=mi-clave-secreta-windows-$(Get-Random -Count 32)
 
 # Dominios permitidos (ajusta según necesites)
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080
+ALLOWED_ORIGINS=http://localhost:4000,http://localhost:8080
 
-# Puerto (puedes cambiarlo si 3000 está en uso)
-PORT=3000
+# Puerto (puedes cambiarlo si 3001 está en uso)
+PORT=3001
 
 # Rate limit (10 solicitudes/segundo por IP)
 RATE_LIMIT_QPS=10
@@ -83,10 +83,10 @@ docker-compose down
 docker build -t email-validator .
 
 # Ejecutar contenedor
-docker run -p 3000:3000 --env-file .env email-validator
+docker run -p 3001:3001 --env-file .env email-validator
 
 # Ejecutar en segundo plano
-docker run -d -p 3000:3000 --name email-validator-api --env-file .env email-validator
+docker run -d -p 3001:3001 --name email-validator-api --env-file .env email-validator
 ```
 
 ## 🧪 **Probar el Servicio**
@@ -97,7 +97,7 @@ docker run -d -p 3000:3000 --name email-validator-api --env-file .env email-vali
 $API_KEY = (Get-Content .env | Select-String "API_KEY" | ForEach-Object { $_ -replace "API_KEY=", "" }).Trim()
 
 # Probar el servicio
-curl -X POST http://localhost:3000/api/v1/validate-email `
+curl -X POST http://localhost:3001/api/v1/validate-email `
   -H "Content-Type: application/json" `
   -H "X-API-Key: $API_KEY" `
   -d '{"email":"test@gmail.com"}'
@@ -106,7 +106,7 @@ curl -X POST http://localhost:3000/api/v1/validate-email `
 ### **Usar Postman:**
 1. Importa `docs/Email-Validator-API.postman_collection.json`
 2. Configura las variables:
-   - `base_url`: `http://localhost:3000`
+   - `base_url`: `http://localhost:3001`
    - `api_key`: (tu API_KEY del archivo .env)
 3. Ejecuta las pruebas de la colección
 
@@ -114,8 +114,8 @@ curl -X POST http://localhost:3000/api/v1/validate-email `
 
 ### **Error: "Port already in use"**
 ```powershell
-# Verificar qué proceso usa el puerto 3000
-netstat -ano | findstr :3000
+# Verificar qué proceso usa el puerto 3001
+netstat -ano | findstr :3001
 
 # Cambiar puerto en .env
 # PORT=3001
@@ -233,9 +233,9 @@ Set-Service -Name docker -StartupType Automatic
 
 ### **3. Configurar Firewall:**
 ```powershell
-# Permitir puerto 3000
+# Permitir puerto 3001
 New-NetFirewallRule -DisplayName "Email Validator API" `
-  -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow
+  -Direction Inbound -Protocol TCP -LocalPort 3001 -Action Allow
 ```
 
 ### **4. Configurar Logging:**
@@ -298,8 +298,8 @@ Email-Validador/
 
 2. **Puerto en uso:**
    ```powershell
-   # Liberar puerto 3000
-   netstat -ano | findstr :3000
+   # Liberar puerto 3001
+   netstat -ano | findstr :3001
    taskkill /PID <PID> /F
    ```
 
@@ -323,7 +323,7 @@ Email-Validador/
 docker --version
 docker-compose --version
 docker ps
-curl http://localhost:3000/api/v1/validate-email -H "X-API-Key: $env:API_KEY"
+curl http://localhost:3001/api/v1/validate-email -H "X-API-Key: $env:API_KEY"
 ```
 
 Si todos los comandos funcionan, ¡el servicio está listo! 🎉

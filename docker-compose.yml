@@ -5,20 +5,27 @@ services:
       dockerfile: Dockerfile
     container_name: email-validator-api
     ports:
-      - "3000:3000"
+      - "3001:3001"
     environment:
       - API_KEY=${API_KEY:-your-super-secret-api-key-change-me-in-production}
       - ADMIN_USER=${ADMIN_USER:-Administrator}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin12345}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:8080}
-      - PORT=3000
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:4000,http://localhost:5173,http://localhost:8080}
+      - PORT=3001
       - RATE_LIMIT_QPS=${RATE_LIMIT_QPS:-10}
+      - DNS_NAMESERVERS=${DNS_NAMESERVERS:-}
+      - DNS_TIMEOUT_MS=${DNS_TIMEOUT_MS:-2000}
+      - DNS_ATTEMPTS=${DNS_ATTEMPTS:-2}
+      - DNS_CACHE_SIZE=${DNS_CACHE_SIZE:-5000}
+      - DNS_POSITIVE_MIN_TTL=${DNS_POSITIVE_MIN_TTL:-60}
+      - DNS_NEGATIVE_MIN_TTL=${DNS_NEGATIVE_MIN_TTL:-60}
+      - DNS_NEGATIVE_MAX_TTL=${DNS_NEGATIVE_MAX_TTL:-300}
       - RUST_LOG=${RUST_LOG:-info}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:$$PORT/health"]
       interval: 30s
       timeout: 10s
       retries: 3

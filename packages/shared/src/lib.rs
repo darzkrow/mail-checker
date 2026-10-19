@@ -323,6 +323,20 @@ pub struct AppConfig {
     pub rate_limit_qps: u32,
     pub port: u16,
     pub data_dir: String,
+    /// Servidores DNS explícitos (si está vacío se usa la configuración del sistema)
+    pub dns_nameservers: Vec<String>,
+    /// Timeout por intento de consulta DNS (ms)
+    pub dns_timeout_ms: u64,
+    /// Número de reintentos por consulta DNS
+    pub dns_attempts: usize,
+    /// Tamaño de la caché DNS en memoria
+    pub dns_cache_size: usize,
+    /// TTL mínimo aplicado a respuestas positivas (segundos)
+    pub dns_positive_min_ttl: u64,
+    /// TTL mínimo aplicado a respuestas negativas (segundos)
+    pub dns_negative_min_ttl: u64,
+    /// TTL máximo aplicado a respuestas negativas (segundos)
+    pub dns_negative_max_ttl: u64,
 }
 
 impl AppConfig {
@@ -353,7 +367,7 @@ impl AppConfig {
         };
 
         let allowed_origins: Vec<String> = std::env::var("ALLOWED_ORIGINS")
-            .unwrap_or_else(|_| "http://localhost:3000,http://localhost:5173".to_string())
+            .unwrap_or_else(|_| "http://localhost:4000,http://localhost:5173".to_string())
             .split(',')
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
@@ -367,7 +381,29 @@ impl AppConfig {
         let port: u16 = std::env::var("PORT")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(3000);
+            .unwrap_or(3001);
+
+        // ── Configuración de DNS (rendimiento) ──
+        let dns_nameservers: Vec<String> = std::env::var("DNS_NAMESERVERS")
+            .unwrap_or_default()
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let env_num = |key: &str, default: u64| -> u64 {
+            std::env::var(key)
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default)
+        };
+
+        let dns_timeout_ms = env_num("DNS_TIMEOUT_MS", 2000);
+        let dns_attempts = env_num("DNS_ATTEMPTS", 2) as usize;
+        let dns_cache_size = env_num("DNS_CACHE_SIZE", 5000) as usize;
+        let dns_positive_min_ttl = env_num("DNS_POSITIVE_MIN_TTL", 60);
+        let dns_negative_min_ttl = env_num("DNS_NEGATIVE_MIN_TTL", 60);
+        let dns_negative_max_ttl = env_num("DNS_NEGATIVE_MAX_TTL", 300);
 
         Self {
             api_key,
@@ -377,6 +413,13 @@ impl AppConfig {
             rate_limit_qps,
             port,
             data_dir,
+            dns_nameservers,
+            dns_timeout_ms,
+            dns_attempts,
+            dns_cache_size,
+            dns_positive_min_ttl,
+            dns_negative_min_ttl,
+            dns_negative_max_ttl,
         }
     }
 

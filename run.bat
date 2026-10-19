@@ -85,12 +85,12 @@ echo.
 echo ============================================
 echo SERVICIO CONFIGURADO
 echo ============================================
-echo Puerto: 3000
-echo URL: http://localhost:3000
+echo Puerto: 3001
+echo URL: http://localhost:3001
 echo Endpoint: POST /api/v1/validate-email
 echo.
 echo Comandos de prueba:
-echo curl -X POST http://localhost:3000/api/v1/validate-email ^
+echo curl -X POST http://localhost:3001/api/v1/validate-email ^
 echo   -H "Content-Type: application/json" ^
 echo   -H "X-API-Key: %API_KEY%" ^
 echo   -d "{\"email\":\"test@gmail.com\"}"
@@ -121,12 +121,12 @@ if "%choice%"=="1" (
     echo [INFO] Ejecutando con Docker run...
     echo [INFO] Usa Ctrl+C para detener el servicio
     echo.
-    docker run --rm -p 3000:3000 --env-file .env email-validator
+    docker run --rm -p 3001:3001 --env-file .env email-validator
 ) else if "%choice%"=="3" (
     echo.
     echo [INFO] Imagen construida exitosamente.
     echo Para ejecutar manualmente:
-    echo   docker run --rm -p 3000:3000 --env-file .env email-validator
+    echo   docker run --rm -p 3001:3001 --env-file .env email-validator
     echo.
 ) else (
     echo.

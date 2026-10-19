@@ -89,12 +89,12 @@ echo
 echo -e "${BLUE}============================================${NC}"
 echo -e "${BLUE}SERVICIO CONFIGURADO${NC}"
 echo -e "${BLUE}============================================${NC}"
-echo -e "Puerto: ${GREEN}3000${NC}"
-echo -e "URL: ${GREEN}http://localhost:3000${NC}"
+echo -e "Puerto: ${GREEN}3001${NC}"
+echo -e "URL: ${GREEN}http://localhost:3001${NC}"
 echo -e "Endpoint: ${GREEN}POST /api/v1/validate-email${NC}"
 echo
 echo -e "${YELLOW}Comandos de prueba:${NC}"
-echo "curl -X POST http://localhost:3000/api/v1/validate-email \\"
+echo "curl -X POST http://localhost:3001/api/v1/validate-email \\"
 echo "  -H \"Content-Type: application/json\" \\"
 echo "  -H \"X-API-Key: ${API_KEY}\" \\"
 echo "  -d '{\"email\":\"test@gmail.com\"}'"
@@ -126,13 +126,13 @@ case $choice in
         echo -e "${GREEN}  Ejecutando con Docker run...${NC}"
         echo -e "${YELLOW} Usa Ctrl+C para detener el servicio${NC}"
         echo
-        docker run --rm -p 3000:3000 --env-file .env email-validator
+        docker run --rm -p 3001:3001 --env-file .env email-validator
         ;;
     3)
         echo
         echo -e "${GREEN} Imagen construida exitosamente.${NC}"
         echo -e "${YELLOW}Para ejecutar manualmente:${NC}"
-        echo "  docker run --rm -p 3000:3000 --env-file .env email-validator"
+        echo "  docker run --rm -p 3001:3001 --env-file .env email-validator"
         echo
         ;;
     *)

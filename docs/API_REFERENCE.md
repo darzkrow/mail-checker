@@ -2,7 +2,7 @@
 
 ## 📋 **Información General**
 
-- **Base URL**: `http://localhost:3000` (o tu dominio de producción)
+- **Base URL**: `http://localhost:3001` (o tu dominio de producción)
 - **Versión de API**: `v1`
 - **Formato de respuesta**: JSON
 - **Autenticación**: API Key en header `X-API-Key`
@@ -154,7 +154,7 @@ X-API-Key: <tu-api-key>
 
 **Request:**
 ```bash
-curl -X POST http://localhost:3000/api/v1/validate-email \
+curl -X POST http://localhost:3001/api/v1/validate-email \
   -H "Content-Type: application/json" \
   -H "X-API-Key: tu-api-key-aqui" \
   -d '{"email":"usuario@gmail.com"}'
@@ -175,7 +175,7 @@ curl -X POST http://localhost:3000/api/v1/validate-email \
 
 **Request:**
 ```bash
-curl -X POST http://localhost:3000/api/v1/validate-email \
+curl -X POST http://localhost:3001/api/v1/validate-email \
   -H "Content-Type: application/json" \
   -H "X-API-Key: tu-api-key-aqui" \
   -d '{"email":"usuario.sin.arroba.com"}'
@@ -193,7 +193,7 @@ curl -X POST http://localhost:3000/api/v1/validate-email \
 
 **Request:**
 ```bash
-curl -X POST http://localhost:3000/api/v1/validate-email \
+curl -X POST http://localhost:3001/api/v1/validate-email \
   -H "Content-Type: application/json" \
   -H "X-API-Key: tu-api-key-aqui" \
   -d '{"email":"usuario@dominio-inexistente-12345.com"}'
@@ -217,8 +217,8 @@ curl -X POST http://localhost:3000/api/v1/validate-email \
 | Variable | Descripción | Por defecto | Ejemplo |
 |----------|-------------|-------------|---------|
 | `API_KEY` | Clave de autenticación | **(requerido)** | `super-secret-key-12345` |
-| `ALLOWED_ORIGINS` | Dominios CORS permitidos | `http://localhost:3000,http://localhost:5173` | `https://tudominio.com` |
-| `PORT` | Puerto del servidor | `3000` | `8080` |
+| `ALLOWED_ORIGINS` | Dominios CORS permitidos | `http://localhost:4000,http://localhost:5173` | `https://tudominio.com` |
+| `PORT` | Puerto del servidor | `3001` | `8080` |
 | `RATE_LIMIT_QPS` | Solicitudes por segundo | `10` | `50` |
 | `RUST_LOG` | Nivel de logging | `info` | `debug` |
 
@@ -231,7 +231,7 @@ API_KEY=my-super-secret-api-key-12345
 ALLOWED_ORIGINS=https://tudominio.com,https://app.tudominio.com
 
 # Puerto del servidor
-PORT=3000
+PORT=3001
 
 # Rate limiting
 RATE_LIMIT_QPS=10
@@ -252,7 +252,7 @@ cp .env.example .env
 docker-compose up --build -d
 
 # 3. Verificar
-curl http://localhost:3000/api/v1/validate-email \
+curl http://localhost:3001/api/v1/validate-email \
   -H "X-API-Key: $(grep API_KEY .env | cut -d'=' -f2)" \
   -H "Content-Type: application/json" \
   -d '{"email":"test@gmail.com"}'
@@ -268,8 +268,8 @@ spec:
   selector:
     app: email-validator
   ports:
-    - port: 3000
-      targetPort: 3000
+    - port: 3001
+      targetPort: 3001
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -289,7 +289,7 @@ spec:
       - name: email-validator
         image: email-validator:latest
         ports:
-        - containerPort: 3000
+        - containerPort: 3001
         env:
         - name: API_KEY
           valueFrom:
@@ -362,7 +362,7 @@ El endpoint principal sirve como health check:
 ### **Pruebas con cURL:**
 ```bash
 # Test básico
-curl -X POST http://localhost:3000/api/v1/validate-email \
+curl -X POST http://localhost:3001/api/v1/validate-email \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
   -d '{"email":"test@gmail.com"}'
@@ -370,7 +370,7 @@ curl -X POST http://localhost:3000/api/v1/validate-email \
 # Test de rate limiting
 for i in {1..20}; do
   curl -s -o /dev/null -w "%{http_code}\n" \
-    -X POST http://localhost:3000/api/v1/validate-email \
+    -X POST http://localhost:3001/api/v1/validate-email \
     -H "Content-Type: application/json" \
     -H "X-API-Key: $API_KEY" \
     -d '{"email":"test@gmail.com"}'
@@ -384,7 +384,7 @@ ab -n 1000 -c 10 \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
   -p test-payload.json \
-  http://localhost:3000/api/v1/validate-email
+  http://localhost:3001/api/v1/validate-email
 ```
 
 ## 📝 **Best Practices para Clientes**

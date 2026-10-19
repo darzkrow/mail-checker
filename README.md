@@ -27,15 +27,15 @@ docker compose up -d
 ### 3. Probar el servicio
 ```powershell
 # Verificar estado
-Invoke-RestMethod -Uri "http://localhost:3000/health"
+Invoke-RestMethod -Uri "http://localhost:3001/health"
 
 # Validar un correo
 $headers = @{
     "Content-Type" = "application/json"
-    "X-API-Key" = "8T4sEA3ifZSMYpXwkUVogKamc2Ht0Nz6"
+    "X-API-Key" = "TU_API_KEY_AQUI"
 }
 $body = '{"email":"test@gmail.com"}'
-Invoke-RestMethod -Uri "http://localhost:3000/api/v1/validate-email" -Method Post -Headers $headers -Body $body | ConvertTo-Json
+Invoke-RestMethod -Uri "http://localhost:3001/api/v1/validate-email" -Method Post -Headers $headers -Body $body | ConvertTo-Json
 ```
 
 ---
@@ -72,8 +72,8 @@ Toda la documentación detallada se encuentra estandarizada en la carpeta [`docs
 | Variable | Descripción | Valor por defecto |
 |---|---|---|
 | `API_KEY` | Clave secreta requerida en el header `X-API-Key` | *(requerido en producción)* |
-| `ALLOWED_ORIGINS` | Dominios autorizados para CORS (separados por coma) | `http://localhost:3000,http://localhost:5173` |
-| `PORT` | Puerto de escucha del servidor | `3000` |
+| `ALLOWED_ORIGINS` | Dominios autorizados para CORS (separados por coma) | `http://localhost:4000,http://localhost:5173` |
+| `PORT` | Puerto de escucha del servidor | `3001` |
 | `RATE_LIMIT_QPS` | Solicitudes por segundo permitidas | `10` |
 | `RUST_LOG` | Nivel de logs (`debug`, `info`, `warn`, `error`) | `info` |
 

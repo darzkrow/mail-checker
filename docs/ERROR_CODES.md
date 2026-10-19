@@ -32,7 +32,7 @@ Para evitar el análisis frágil de cadenas de texto (`reason` o `error`), la AP
 ### **Ejemplo de Implementación de Mapping en el Cliente (JavaScript / TypeScript)**
 
 ```javascript
-const response = await fetch('http://localhost:3000/api/v1/validate-email', {
+const response = await fetch('http://localhost:3001/api/v1/validate-email', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -300,7 +300,7 @@ RATE_LIMIT_QPS=100  # Escalar según capacidad del servidor
 ### **Error 401 - "Falta el header X-API-Key"**
 **Solución:**
 ```bash
-curl -X POST http://localhost:3000/api/v1/validate-email \
+curl -X POST http://localhost:3001/api/v1/validate-email \
   -H "X-API-Key: $(cat .env | grep API_KEY | cut -d'=' -f2)" \
   -H "Content-Type: application/json" \
   -d '{"email":"test@gmail.com"}'

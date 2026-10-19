@@ -23,7 +23,22 @@ pub async fn resolve_mx_records(
         return Ok(DnsResolutionResult::NoRecords);
     }
 
-    match resolver.mx_lookup(clean_domain).await {
+    // Lanzamos las consultas MX y A/AAAA en paralelo. El fallback RFC 5321 solo
+    // se utiliza si no hay MX, pero ejecutarlo en paralelo evita una segunda
+    // espera secuencial (especialmente costosa en dominios sin MX o inexistentes).
+    let (mx_result, ip_result) = tokio::join!(
+        resolver.mx_lookup(clean_domain),
+        resolver.lookup_ip(clean_domain),
+    );
+
+    // Para no depender del nombre concreto del tipo de lookup, evaluamos el
+    // resultado A/AAAA una sola vez e ignoramos los errores (sin registros).
+    let ip_ok = match &ip_result {
+        Ok(ip_lookup) => ip_lookup.iter().next().is_some(),
+        Err(_) => false,
+    };
+
+    match mx_result {
         Ok(mx_lookup) => {
             let mut valid_mx_found = false;
 
@@ -45,13 +60,11 @@ pub async fn resolve_mx_records(
 
             if valid_mx_found {
                 Ok(DnsResolutionResult::ValidMx)
+            } else if ip_ok {
+                // Fallback SMTP RFC 5321 Sección 5.1
+                Ok(DnsResolutionResult::ValidMx)
             } else {
-                // Si la lista de MX está vacía, aplicar fallback SMTP RFC 5321 Sección 5.1
-                if resolve_fallback_host(resolver, clean_domain).await? {
-                    Ok(DnsResolutionResult::ValidMx)
-                } else {
-                    Ok(DnsResolutionResult::NoRecords)
-                }
+                Ok(DnsResolutionResult::NoRecords)
             }
         }
         Err(err) => {
@@ -59,7 +72,7 @@ pub async fn resolve_mx_records(
             match err.kind() {
                 ResolveErrorKind::NoRecordsFound { .. } => {
                     // Sin registros MX -> Fallback RFC 5321 a registros A/AAAA
-                    if resolve_fallback_host(resolver, clean_domain).await? {
+                    if ip_ok {
                         Ok(DnsResolutionResult::ValidMx)
                     } else {
                         Ok(DnsResolutionResult::NoRecords)
@@ -78,20 +91,5 @@ pub async fn resolve_mx_records(
                 }
             }
         }
-    }
-}
-
-/// Fallback a registros A / AAAA según RFC 5321 Sección 5.1
-/// Si un dominio carece de registros MX, se asume un registro MX implícito hacia el registro A/AAAA del host.
-async fn resolve_fallback_host(
-    resolver: &TokioAsyncResolver,
-    domain: &str,
-) -> Result<bool, ValidationError> {
-    match resolver.lookup_ip(domain).await {
-        Ok(ip_lookup) => {
-            let has_ip = ip_lookup.iter().count() > 0;
-            Ok(has_ip)
-        }
-        Err(_) => Ok(false),
     }
 }

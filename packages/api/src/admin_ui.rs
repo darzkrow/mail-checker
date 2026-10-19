@@ -42,8 +42,9 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
       flex-direction: column;
     }
 
-    /* LOGIN MODAL OVERLAY */
-    #loginOverlay {
+    /* LOGIN / PASSWORD MODAL OVERLAY */
+    #loginOverlay,
+    #passwordOverlay {
       position: fixed;
       inset: 0;
       background: rgba(11, 15, 25, 0.95);
@@ -348,16 +349,16 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
         </div>
       </div>
       <h2 style="font-size:1.4rem; font-weight:800; margin-bottom:0.25rem;">Panel de Administración</h2>
-      <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1.5rem;">Inicia sesión con las credenciales preconfiguradas</p>
+      <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1.5rem;">Ingresa tus credenciales de administrador</p>
       
       <form id="loginForm" onsubmit="handleLogin(event)">
         <div class="input-group" style="text-align:left;">
           <label>Usuario</label>
-          <input type="text" id="loginUser" value="Administrator" required>
+          <input type="text" id="loginUser" autocomplete="username" placeholder="Usuario" required>
         </div>
         <div class="input-group" style="text-align:left;">
           <label>Contraseña</label>
-          <input type="password" id="loginPass" value="admin12345" required>
+          <input type="password" id="loginPass" autocomplete="current-password" placeholder="Contraseña" required>
         </div>
         <div id="loginError" style="display:none; color:var(--danger); font-size:0.8rem; margin-bottom:1rem; font-weight:600;">
           Credenciales incorrectas.
@@ -365,6 +366,31 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
         <button type="submit" class="btn" style="width:100%; justify-content:center; padding:0.75rem;">
           Ingresar al Panel
         </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CAMBIAR CONTRASEÑA -->
+  <div id="passwordOverlay" style="display:none;">
+    <div class="login-card">
+      <h2 style="font-size:1.3rem; font-weight:800; margin-bottom:0.25rem;">Cambiar contraseña</h2>
+      <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1.25rem;">
+        Mínimo 8 caracteres, con mayúscula, minúscula, número y símbolo.
+      </p>
+      <form id="passwordForm" onsubmit="handleChangePassword(event)">
+        <div class="input-group" style="text-align:left;">
+          <label>Nueva contraseña</label>
+          <input type="password" id="newPass" autocomplete="new-password" minlength="8" maxlength="128" required>
+        </div>
+        <div class="input-group" style="text-align:left;">
+          <label>Confirmar nueva contraseña</label>
+          <input type="password" id="newPass2" autocomplete="new-password" minlength="8" maxlength="128" required>
+        </div>
+        <div id="passwordError" style="display:none; color:var(--danger); font-size:0.8rem; margin-bottom:0.75rem; font-weight:600;"></div>
+        <div style="display:flex; gap:0.75rem; margin-top:0.5rem;">
+          <button type="button" class="btn" style="flex:1; justify-content:center; background:transparent; border:1px solid var(--card-border-hover);" onclick="closePasswordModal()">Cancelar</button>
+          <button type="submit" class="btn" style="flex:1; justify-content:center;">Guardar</button>
+        </div>
       </form>
     </div>
   </div>
@@ -405,7 +431,8 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
     </nav>
 
     <div class="user-profile">
-      <span class="badge badge-success" id="activeUserBadge">Administrator</span>
+      <span class="badge badge-success" id="activeUserBadge"></span>
+      <button class="btn btn-sm" onclick="openPasswordModal()">Cambiar contraseña</button>
       <button class="btn btn-sm btn-danger" onclick="logout()">Salir</button>
     </div>
   </header>
@@ -608,7 +635,7 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
           </div>
           <div class="input-group">
             <label>Correo Electrónico a Validar</label>
-            <input type="email" id="testerEmail" value="contacto@empresa.com">
+            <input type="email" id="testerEmail" placeholder="correo@ejemplo.com">
           </div>
           <button class="btn" onclick="executeValidationTest()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -673,6 +700,11 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
       const token = sessionStorage.getItem('admin_token');
       const overlay = document.getElementById('loginOverlay');
       if (token) {
+        try {
+          document.getElementById('activeUserBadge').innerText = atob(token).split(':')[0];
+        } catch (e) {
+          // token inválido en sessionStorage: se ignora
+        }
         overlay.style.display = 'none';
         loadMetrics();
       } else {
@@ -692,6 +724,7 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
 
       if (res.ok) {
         sessionStorage.setItem('admin_token', cred);
+        document.getElementById('activeUserBadge').innerText = u;
         document.getElementById('loginError').style.display = 'none';
         document.getElementById('loginOverlay').style.display = 'none';
         loadMetrics();
@@ -703,6 +736,50 @@ pub const ADMIN_HTML: &str = r#"<!DOCTYPE html>
     function logout() {
       sessionStorage.removeItem('admin_token');
       location.reload();
+    }
+
+    // CAMBIAR CONTRASEÑA
+    function openPasswordModal() {
+      document.getElementById('passwordForm').reset();
+      document.getElementById('passwordError').style.display = 'none';
+      document.getElementById('passwordOverlay').style.display = 'flex';
+    }
+
+    function closePasswordModal() {
+      document.getElementById('passwordOverlay').style.display = 'none';
+    }
+
+    async function handleChangePassword(e) {
+      e.preventDefault();
+      const p1 = document.getElementById('newPass').value;
+      const p2 = document.getElementById('newPass2').value;
+      const err = document.getElementById('passwordError');
+
+      if (p1 !== p2) {
+        err.innerText = 'Las contraseñas no coinciden.';
+        err.style.display = 'block';
+        return;
+      }
+
+      const res = await fetch('/api/v1/admin/password', {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_password: p1 })
+      });
+
+      if (res.ok) {
+        alert('Contraseña actualizada. Inicia sesión nuevamente con la nueva contraseña.');
+        sessionStorage.removeItem('admin_token');
+        location.reload();
+      } else if (res.status === 400) {
+        err.innerText = 'La contraseña no cumple la política: mínimo 8 caracteres, mayúscula, minúscula, número y símbolo.';
+        err.style.display = 'block';
+      } else if (res.status === 401) {
+        logout();
+      } else {
+        err.innerText = 'No se pudo cambiar la contraseña. Intenta nuevamente.';
+        err.style.display = 'block';
+      }
     }
 
     function switchTab(tabId) {

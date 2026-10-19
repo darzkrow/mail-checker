@@ -40,10 +40,10 @@ USER appuser
 
 ENV DATA_DIR=/app/data
 
-EXPOSE 3000
+EXPOSE 3001
 
-# Health check usando curl
+# Health check usando curl (respeta el puerto configurado en PORT)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
+    CMD curl -f "http://localhost:${PORT:-3001}/health" || exit 1
 
 CMD ["./email-validator"]

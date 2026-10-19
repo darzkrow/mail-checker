@@ -8,11 +8,12 @@ use admin_ui::ADMIN_HTML;
 use axum::{
     extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, HeaderValue, Method, StatusCode},
-    response::{Html, IntoResponse, Json, Response},
+    response::{Html, IntoResponse, Json, Redirect, Response},
     routing::{delete, get, post},
     Router,
 };
 use dns::{resolve_mx_records, DnsResolutionResult};
+use hickory_resolver::config::{NameServerConfigGroup, ResolverConfig, ResolverOpts};
 use hickory_resolver::TokioAsyncResolver;
 use key_manager::{KeyManager, KeyValidationResult};
 use log_buffer::{LogBuffer, LogLayer};
@@ -24,9 +25,9 @@ use shared::{
 };
 use std::{
     collections::HashMap,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     sync::{atomic::Ordering, Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant},
 };
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
@@ -314,6 +315,11 @@ async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "✅ Email Validator API is running")
 }
 
+/// La raíz no tiene contenido propio: llevamos directo al panel administrativo.
+async fn root_redirect_handler() -> Redirect {
+    Redirect::to("/admin")
+}
+
 // ==================== HANDLERS PANEL ADMINISTRATIVO ====================
 
 async fn admin_dashboard_handler() -> Html<&'static str> {
@@ -569,6 +575,49 @@ async fn openapi_spec_handler() -> Json<serde_json::Value> {
 
 // ==================== SERVIDOR PRINCIPAL ====================
 
+/// Construye el resolver DNS con timeouts, reintentos y caché ajustables.
+///
+/// Si `DNS_NAMESERVERS` está definido se usan esos servidores; de lo contrario
+/// se parte de la configuración del sistema. Los TTL mínimos permiten que las
+/// respuestas (incluidas las negativas) se reutilicen desde la caché en lugar
+/// de volver a consultar la red en cada validación.
+fn build_resolver(config: &AppConfig) -> Result<TokioAsyncResolver, Box<dyn std::error::Error>> {
+    let mut opts = ResolverOpts::default();
+    opts.timeout = Duration::from_millis(config.dns_timeout_ms.max(100));
+    opts.attempts = config.dns_attempts.max(1);
+    opts.cache_size = config.dns_cache_size;
+    opts.positive_min_ttl = Some(Duration::from_secs(config.dns_positive_min_ttl));
+    opts.negative_min_ttl = Some(Duration::from_secs(config.dns_negative_min_ttl));
+    opts.negative_max_ttl = Some(Duration::from_secs(
+        config
+            .dns_negative_max_ttl
+            .max(config.dns_negative_min_ttl),
+    ));
+
+    if config.dns_nameservers.is_empty() {
+        let (sys_config, mut sys_opts) = hickory_resolver::system_conf::read_system_conf()?;
+        sys_opts.timeout = opts.timeout;
+        sys_opts.attempts = opts.attempts;
+        sys_opts.cache_size = opts.cache_size;
+        sys_opts.positive_min_ttl = opts.positive_min_ttl;
+        sys_opts.negative_min_ttl = opts.negative_min_ttl;
+        sys_opts.negative_max_ttl = opts.negative_max_ttl;
+        Ok(TokioAsyncResolver::tokio(sys_config, sys_opts))
+    } else {
+        let ips: Vec<IpAddr> = config
+            .dns_nameservers
+            .iter()
+            .filter_map(|server| server.parse::<IpAddr>().ok())
+            .collect();
+        if ips.is_empty() {
+            return Err("DNS_NAMESERVERS no contiene direcciones IP válidas".into());
+        }
+        let name_servers = NameServerConfigGroup::from_ips_clear(&ips, 53, true);
+        let resolver_config = ResolverConfig::from_parts(None, Vec::new(), name_servers);
+        Ok(TokioAsyncResolver::tokio(resolver_config, opts))
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Configuración de logging con buffer en memoria para el dashboard
@@ -588,7 +637,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Arc::new(AppConfig::from_env());
 
     // 2. Resolver DNS, Gestor de Claves y Limitador de Tasa
-    let resolver = TokioAsyncResolver::tokio_from_system_conf()?;
+    let resolver = build_resolver(&config)?;
     let key_manager = Arc::new(KeyManager::init(&config.data_dir, &config.api_key).await);
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit_qps));
     let metrics = Arc::new(AtomicMetrics::new());
@@ -642,6 +691,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. Configuración del Router con Rutas de API y Admin protegidas
     let app = Router::new()
+        // Raíz: redirige al panel administrativo (evita una página vacía)
+        .route("/", get(root_redirect_handler))
         // API Pública
         .route("/health", get(health_check))
         .route("/api/v1/validate-email", post(validate_email_handler))

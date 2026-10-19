@@ -58,10 +58,10 @@ Esta guía contiene los pasos necesarios para desplegar, gestionar y probar el s
 Permite a balanceadores o a Docker verificar si el servicio está operativo.
 ```bash
 # cURL
-curl http://localhost:3000/health
+curl http://localhost:3001/health
 
 # PowerShell
-Invoke-RestMethod -Uri "http://localhost:3000/health"
+Invoke-RestMethod -Uri "http://localhost:3001/health"
 ```
 **Respuesta (200 OK):**
 ```text
@@ -74,10 +74,10 @@ Invoke-RestMethod -Uri "http://localhost:3000/health"
 ```powershell
 $headers = @{
     "Content-Type" = "application/json"
-    "X-API-Key" = "8T4sEA3ifZSMYpXwkUVogKamc2Ht0Nz6"
+    "X-API-Key" = "TU_API_KEY_AQUI"
 }
 $body = '{"email":"test@gmail.com"}'
-Invoke-RestMethod -Uri "http://localhost:3000/api/v1/validate-email" -Method Post -Headers $headers -Body $body | ConvertTo-Json
+Invoke-RestMethod -Uri "http://localhost:3001/api/v1/validate-email" -Method Post -Headers $headers -Body $body | ConvertTo-Json
 ```
 **Respuesta (200 OK):**
 ```json
@@ -96,10 +96,10 @@ Invoke-RestMethod -Uri "http://localhost:3000/api/v1/validate-email" -Method Pos
 ```powershell
 $headers = @{
     "Content-Type" = "application/json"
-    "X-API-Key" = "8T4sEA3ifZSMYpXwkUVogKamc2Ht0Nz6"
+    "X-API-Key" = "TU_API_KEY_AQUI"
 }
 $body = '{"email":"admin@glinyer.com"}'
-Invoke-RestMethod -Uri "http://localhost:3000/api/v1/validate-email" -Method Post -Headers $headers -Body $body | ConvertTo-Json
+Invoke-RestMethod -Uri "http://localhost:3001/api/v1/validate-email" -Method Post -Headers $headers -Body $body | ConvertTo-Json
 ```
 **Respuesta (200 OK):**
 ```json
@@ -118,10 +118,10 @@ Invoke-RestMethod -Uri "http://localhost:3000/api/v1/validate-email" -Method Pos
 ```powershell
 $headers = @{
     "Content-Type" = "application/json"
-    "X-API-Key" = "8T4sEA3ifZSMYpXwkUVogKamc2Ht0Nz6"
+    "X-API-Key" = "TU_API_KEY_AQUI"
 }
 $body = '{"email":"usuario-invalido"}'
-Invoke-RestMethod -Uri "http://localhost:3000/api/v1/validate-email" -Method Post -Headers $headers -Body $body
+Invoke-RestMethod -Uri "http://localhost:3001/api/v1/validate-email" -Method Post -Headers $headers -Body $body
 ```
 **Respuesta (400 Bad Request):**
 ```json
@@ -136,7 +136,7 @@ Invoke-RestMethod -Uri "http://localhost:3000/api/v1/validate-email" -Method Pos
 ```powershell
 $headers = @{ "Content-Type" = "application/json" }
 $body = '{"email":"test@gmail.com"}'
-Invoke-RestMethod -Uri "http://localhost:3000/api/v1/validate-email" -Method Post -Headers $headers -Body $body
+Invoke-RestMethod -Uri "http://localhost:3001/api/v1/validate-email" -Method Post -Headers $headers -Body $body
 ```
 **Respuesta (401 Unauthorized):**
 ```json
@@ -152,5 +152,5 @@ Invoke-RestMethod -Uri "http://localhost:3000/api/v1/validate-email" -Method Pos
 En esta misma carpeta se incluye la colección lista para usar:
 - Importa [`Email-Validator-API.postman_collection.json`](./Email-Validator-API.postman_collection.json) en Postman.
 - Configura las variables:
-  - `base_url`: `http://localhost:3000`
+  - `base_url`: `http://localhost:3001`
   - `api_key`: Tu valor de `API_KEY` definido en `.env`.

@@ -43,7 +43,7 @@ Este documento detalla las medidas de seguridad implementadas en el microservici
 ### **Desarrollo (Local)**
 ```bash
 API_KEY=dev-key-12345
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+ALLOWED_ORIGINS=http://localhost:4000,http://localhost:5173
 RATE_LIMIT_QPS=50
 RUST_LOG=debug
 ```
@@ -148,7 +148,7 @@ deploy:
 ```yaml
 # Solo puerto necesario expuesto
 ports:
-  - "3000:3000"
+  - "3001:3001"
 
 # Network segmentation
 networks:
@@ -160,7 +160,7 @@ networks:
 ### **4. Health Checks:**
 ```yaml
 healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:3000/api/v1/validate-email"]
+  test: ["CMD", "curl", "-f", "http://localhost:3001/api/v1/validate-email"]
   interval: 30s
   timeout: 10s
   retries: 3
