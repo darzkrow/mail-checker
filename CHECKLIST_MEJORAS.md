@@ -8,7 +8,7 @@
 
 - [x] `cargo build --release` → **EXITOSO**
 - [ ] `docker compose up -d` → **CONTAINER HEALTHY**
-- [ ] `curl http://localhost:3000/health` → `✅ Email Validator API is running`
+- [ ] `curl http://localhost:3001/health` → `✅ Email Validator API is running`
 - [ ] Test Postman: `usuario@gmail.com` → `is_deliverable: true, has_mx_records: true`
 - [ ] Test Postman: `noexiste@gmail.com` → `is_deliverable: true` *(PROBLEMA ACTUAL: solo verifica MX)*
 - [ ] Collection Postman completa: **100% PASS**
@@ -189,10 +189,10 @@ cargo build --release --workspace
 cargo test --workspace
 
 # Benchmark (requiere cargo-bench o hyperfine)
-hyperfine --warmup 3 'curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" -d '"'"'{"email":"test@gmail.com"}"'"' http://localhost:3000/api/v1/validate-email'
+hyperfine --warmup 3 'curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" -d '"'"'{"email":"test@gmail.com"}"'"' http://localhost:3001/api/v1/validate-email'
 
 # Verificar response JSON
-curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" -d '{"email":"usuario@gmail.com"}' http://localhost:3000/api/v1/validate-email | jq .
+curl -s -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" -d '{"email":"usuario@gmail.com"}' http://localhost:3001/api/v1/validate-email | jq .
 
 # Logs en vivo
 docker compose logs -f email-validator

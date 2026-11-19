@@ -94,7 +94,7 @@ USER nonroot:nonroot
 # Directorio datos con permisos correctos
 # NOTA: En distroless no hay shell, usar volumen externo
 
-EXPOSE 3000
+EXPOSE 3001
 
 # Health check nativo
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
@@ -142,7 +142,7 @@ services:
     networks:
       - email-validator-internal
     ports:
-      - "127.0.0.1:3000:3000"  # Solo localhost, reverse proxy expone
+      - "127.0.0.1:3001:3001"  # Solo localhost, reverse proxy expone
     
     # Volumes
     volumes:
@@ -271,16 +271,16 @@ graph TB
 
 ```bash
 # === INGRESS (Entrada) ===
-# Solo reverse proxy puede acceder al puerto 3000
-iptables -A INPUT -p tcp -s 10.0.0.0/8 --dport 3000 -j ACCEPT  # Reverse proxy subnet
-iptables -A INPUT -p tcp --dport 3000 -j DROP
+# Solo reverse proxy puede acceder al puerto 3001
+iptables -A INPUT -p tcp -s 10.0.0.0/8 --dport 3001 -j ACCEPT  # Reverse proxy subnet
+iptables -A INPUT -p tcp --dport 3001 -j DROP
 
 # Admin panel - solo IPs de oficina
-iptables -A INPUT -p tcp -s 203.0.113.0/24 --dport 3000 -m string --string "/admin" --algo bm -j ACCEPT
-iptables -A INPUT -p tcp --dport 3000 -m string --string "/admin" --algo bm -j DROP
+iptables -A INPUT -p tcp -s 203.0.113.0/24 --dport 3001 -m string --string "/admin" --algo bm -j ACCEPT
+iptables -A INPUT -p tcp --dport 3001 -m string --string "/admin" --algo bm -j DROP
 
 # Health checks - sin rate limit
-iptables -A INPUT -p tcp --dport 3000 -m string --string "/health" --algo bm -j ACCEPT
+iptables -A INPUT -p tcp --dport 3001 -m string --string "/health" --algo bm -j ACCEPT
 
 # === EGRESS (Salida) ===
 # DNS - solo resolvers autorizados
@@ -422,7 +422,7 @@ echo "Nueva master key: $NEW_MASTER_KEY"
 
 # 5. Verificar
 sleep 10
-curl -H "X-API-Key: $NEW_MASTER_KEY" http://localhost:3000/health
+curl -H "X-API-Key: $NEW_MASTER_KEY" http://localhost:3001/health
 
 echo "✅ Rotación completada"
 ```
@@ -775,13 +775,13 @@ docker tag email-validator-backup:latest darzkrow/email-validator:current
 docker compose up -d email-validator
 
 # 4. Verificar
-curl -sf http://localhost:3000/health && echo "OK"
+curl -sf http://localhost:3001/health && echo "OK"
 ```
 
 #### INC-002: API Key Comprometida (P1)
 ```bash
 # 1. Revocar inmediatamente
-curl -u admin:pass -X DELETE http://localhost:3000/api/v1/admin/keys/COMPROMISED_KEY_ID
+curl -u admin:pass -X DELETE http://localhost:3001/api/v1/admin/keys/COMPROMISED_KEY_ID
 
 # 2. Generar nueva
 NEW_KEY="sk-prod-$(openssl rand -hex 32)"
@@ -790,7 +790,7 @@ NEW_KEY="sk-prod-$(openssl rand -hex 32)"
 # 3. Rotar en clientes (comunicar a equipos afectados)
 
 # 4. Auditar accesos recientes
-curl -u admin:pass http://localhost:3000/api/v1/admin/metrics | jq .auth_failures
+curl -u admin:pass http://localhost:3001/api/v1/admin/metrics | jq .auth_failures
 ```
 
 #### INC-003: Fuga de Datos (P1)
@@ -829,7 +829,7 @@ docker commit email-validator-api forensics/incident-$(date +%s)
 | **Secrets** | API Key rotada | Verificar fecha creación en Secret Manager |
 | **Auth** | Admin IP allowlist | `curl -I http://api/admin` desde IP no permitida |
 | **Auth** | Rate limiting | `for i in {1..15}; do curl -s -o /dev/null -w "%{http_code}" ...; done` |
-| **Input** | Body limit | `curl -d "$(printf 'x%.0s' {1..3000})" ...` debe dar 413 |
+| **Input** | Body limit | `curl -d "$(printf 'x%.0s' {1..3001})" ...` debe dar 413 |
 | **Input** | Email validation | Test casos edge (RFC) |
 | **Logging** | No PII en logs | `docker logs | grep -E "@|password|key"` |
 | **Logging** | Structured JSON | `docker logs | head -1 | jq .` |

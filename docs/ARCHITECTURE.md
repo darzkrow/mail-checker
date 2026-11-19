@@ -1037,7 +1037,7 @@ graph TB
     end
     
     subgraph "Network"
-        Port3000[Port 3000<br/>Host ↔ Container]
+        Port3001[Port 3001<br/>Host ↔ Container]
         DNS[DNS Resolution<br/>Host Network/Container DNS]
     end
     
@@ -1049,7 +1049,7 @@ graph TB
     Docker --> App
     App --> Config
     App --> Data
-    App --> Port3000
+    App --> Port3001
     App --> DNS
     DNS --> DNSServers
     App -.->|SMTP_VERIFICATION_ENABLED| MXServers
@@ -1072,13 +1072,13 @@ services:
       dockerfile: Dockerfile
     container_name: email-validator-api
     ports:
-      - "3000:3000"
+      - "3001:3001"
     environment:
       - API_KEY=${API_KEY}
       - ADMIN_USER=${ADMIN_USER}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
-      - PORT=3000
+      - PORT=3001
       - RATE_LIMIT_QPS=${RATE_LIMIT_QPS}
       - RUST_LOG=${RUST_LOG}
       # SMTP Configuration
@@ -1090,7 +1090,7 @@ services:
       - ./data:/app/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1121,8 +1121,8 @@ flowchart TD
         Perms2[RUN chmod +x ./email-validator<br/>chown -R appuser:appuser /app]
         User2[USER appuser]
         Env2[ENV DATA_DIR=/app/data]
-        Expose2[EXPOSE 3000]
-        Health2[HEALTHCHECK curl -f<br/>http://localhost:3000/health]
+        Expose2[EXPOSE 3001]
+        Health2[HEALTHCHECK curl -f<br/>http://localhost:3001/health]
         Cmd2[CMD [./email-validator]]
     end
     
@@ -1136,8 +1136,8 @@ flowchart TD
 ```mermaid
 graph LR
     subgraph "Inbound (Ingress)"
-        HTTP[TCP 3000<br/>HTTP API<br/>From: Clients/Load Balancer]
-        ADMIN[TCP 3000<br/>Admin Panel<br/>From: Admin IPs Only]
+        HTTP[TCP 3001<br/>HTTP API<br/>From: Clients/Load Balancer]
+        ADMIN[TCP 3001<br/>Admin Panel<br/>From: Admin IPs Only]
     end
     
     subgraph "Outbound (Egress)"
@@ -1237,7 +1237,7 @@ graph LR
 
 ```mermaid
 graph TD
-    Admin[Admin Panel<br/>http://host:3000/admin] --> Login[Basic Auth<br/>Username + Password]
+    Admin[Admin Panel<br/>http://host:3001/admin] --> Login[Basic Auth<br/>Username + Password]
     
     Login --> Dashboard[Dashboard<br/>Real-time Metrics]
     Login --> Metrics[GET /api/v1/admin/metrics<br/>JSON MetricsSnapshot]
@@ -1334,7 +1334,7 @@ checklist
     section Network
     [x] CORS restricted to ALLOWED_ORIGINS
     [x] Outbound only to DNS (53) and SMTP (25/587/465)
-    [x] No inbound except 3000
+    [x] No inbound except 3001
 ```
 
 ---

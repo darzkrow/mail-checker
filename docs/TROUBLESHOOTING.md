@@ -27,18 +27,18 @@ docker compose ps
 # ✅ Up (healthy)
 
 # 2. ¿Health check responde?
-curl -sf http://localhost:3000/health
+curl -sf http://localhost:3001/health
 # ✅ Email Validator API is running
 
 # 3. ¿API valida correctamente?
-curl -s -X POST http://localhost:3000/api/v1/validate-email \
+curl -s -X POST http://localhost:3001/api/v1/validate-email \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
   -d '{"email":"test@gmail.com"}' | jq .is_deliverable
 # ✅ true
 
 # 4. ¿Métricas accesibles?
-curl -u admin:password http://localhost:3000/api/v1/admin/metrics | jq .total_requests
+curl -u admin:password http://localhost:3001/api/v1/admin/metrics | jq .total_requests
 # ✅ número > 0
 ```
 
@@ -55,7 +55,7 @@ flowchart TD
     Health -->|No| ContainerStatus{Container<br/>Status?}
     ContainerStatus -->|Restarting| OOMCheck[OOM Kill?\ndocker stats --no-stream]
     ContainerStatus -->|Exited| ExitCode[Exit Code?\ndocker inspect]
-    ContainerStatus -->|Created| PortBusy[Puerto 3000 ocupado?\nss -tlnp \| grep 3000]
+    ContainerStatus -->|Created| PortBusy[Puerto 3001 ocupado?\nss -tlnp \| grep 3001]
     
     Health -->|Sí| APICheck{API Response<br/>Correcto?}
     
@@ -97,7 +97,7 @@ flowchart TD
 | **Container `Restarting`** | `docker compose logs` muestra `OOM Killed` | Aumentar `mem_limit: 512m` en docker-compose.yml |
 | **Container `Exited (137)`** | OOM Kill (SIGKILL) | Aumentar memoria, reducir `RUST_LOG` |
 | **Container `Exited (1)`** | Error inicio app | `docker compose logs email-validator` ver error |
-| **Puerto 3000 `Address in use`** | `ss -tlnp | grep 3000` muestra otro proceso | Cambiar `PORT` en `.env` o matar proceso |
+| **Puerto 3001 `Address in use`** | `ss -tlnp | grep 3001` muestra otro proceso | Cambiar `PORT` en `.env` o matar proceso |
 | **Health check `unhealthy`** | App no responde en `/health` | Verificar logs, app no inició correctamente |
 | **Imagen no se pull** | `Error pulling image` | Verificar `image:` en docker-compose, credenciales registry |
 
@@ -132,10 +132,10 @@ docker compose exec email-validator sh
 **Verificación rápida:**
 ```bash
 # Ver API keys registradas
-curl -u admin:password http://localhost:3000/api/v1/admin/keys | jq .
+curl -u admin:password http://localhost:3001/api/v1/admin/keys | jq .
 
 # Test auth directo
-curl -H "X-API-Key: $API_KEY" http://localhost:3000/health
+curl -H "X-API-Key: $API_KEY" http://localhost:3001/health
 
 # Verificar key en storage
 cat data/keys.json | jq .
@@ -178,7 +178,7 @@ RATE_LIMIT_QPS=1000
 ```bash
 # Casos de prueba
 curl -X POST -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
-  -d '{"email":"test@temp-mail.org"}' http://localhost:3000/api/v1/validate-email | jq .is_disposable
+  -d '{"email":"test@temp-mail.org"}' http://localhost:3001/api/v1/validate-email | jq .is_disposable
 # true
 
 curl -X POST ... -d '{"email":"admin@example.com"}' | jq .is_role_based
@@ -359,7 +359,7 @@ docker compose logs --since=1h email-validator 2>&1 | grep "^{" | jq -s 'group_b
 
 ```bash
 # Métricas completas
-curl -u admin:password http://localhost:3000/api/v1/admin/metrics | jq .
+curl -u admin:password http://localhost:3001/api/v1/admin/metrics | jq .
 
 # Respuesta esperada:
 {
@@ -469,7 +469,7 @@ set -euo pipefail
 API_KEY="${API_KEY:-}"
 ADMIN_USER="${ADMIN_USER:-admin}"
 ADMIN_PASS="${ADMIN_PASSWORD:-admin12345}"
-BASE_URL="http://localhost:3000"
+BASE_URL="http://localhost:3001"
 
 echo "🔍 Email Validator Health Check"
 echo "================================"
@@ -557,11 +557,11 @@ echo "✅ Health check completado"
 # Test de carga simple (100 requests, 10 concurrentes)
 hey -n 100 -c 10 -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
   -d '{"email":"test@gmail.com"}' \
-  -m POST http://localhost:3000/api/v1/validate-email
+  -m POST http://localhost:3001/api/v1/validate-email
 
 # Benchmark con hyperfine (latencia)
 hyperfine --warmup 3 --runs 50 \
-  'curl -s -X POST -H "X-API-Key: '$API_KEY'" -H "Content-Type: application/json" -d '"'"'{"email":"test@gmail.com"}"'"' http://localhost:3000/api/v1/validate-email'
+  'curl -s -X POST -H "X-API-Key: '$API_KEY'" -H "Content-Type: application/json" -d '"'"'{"email":"test@gmail.com"}"'"' http://localhost:3001/api/v1/validate-email'
 
 # Resultado esperado:
 # Benchmark 1: curl ...
@@ -592,7 +592,7 @@ docker compose start email-validator
 
 # 4. Wait for healthy
 for i in {1..30}; do
-    if curl -sf http://localhost:3000/health >/dev/null; then
+    if curl -sf http://localhost:3001/health >/dev/null; then
         echo "✅ Servicio saludable"
         exit 0
     fi
@@ -629,7 +629,7 @@ docker compose up -d email-validator
 
 # Verificar
 for i in {1..30}; do
-    if curl -sf http://localhost:3000/health >/dev/null; then
+    if curl -sf http://localhost:3001/health >/dev/null; then
         echo "✅ Rollback completado"
         exit 0
     fi
@@ -796,9 +796,9 @@ docker compose stop email-validator           # Parar
 docker compose up -d email-validator          # Iniciar
 
 # === DIAGNÓSTICO ===
-curl -sf http://localhost:3000/health         # Health check
-curl -u admin:pass http://localhost:3000/api/v1/admin/metrics | jq .  # Métricas
-curl -X POST -H "X-API-Key: $KEY" -d '{"email":"test@gmail.com"}' http://localhost:3000/api/v1/validate-email | jq .  # Test API
+curl -sf http://localhost:3001/health         # Health check
+curl -u admin:pass http://localhost:3001/api/v1/admin/metrics | jq .  # Métricas
+curl -X POST -H "X-API-Key: $KEY" -d '{"email":"test@gmail.com"}' http://localhost:3001/api/v1/validate-email | jq .  # Test API
 
 # === DNS ===
 dig MX gmail.com +short

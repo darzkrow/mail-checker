@@ -171,13 +171,31 @@ curl -X POST http://localhost:3001/api/v1/validate-email \
   -d '{"email":"usuario@gmail.com"}'
 ```
 
-**Response:**
+**Response (con SMTP habilitado):**
 ```json
 {
   "email": "usuario@gmail.com",
   "is_valid_syntax": true,
   "has_mx_records": true,
   "is_deliverable": true,
+  "error_code": 0,
+  "reason": "Correo válido y buzón confirmado entregable (SMTP RCPT TO 250)",
+  "smtp_verification": "Deliverable",
+  "smtp_detail": "Correo válido y buzón confirmado entregable (SMTP RCPT TO 250)",
+  "is_catch_all": false,
+  "is_disposable": false,
+  "is_role_based": false
+}
+```
+
+**Response (Solo MX, SMTP deshabilitado):**
+```json
+{
+  "email": "usuario@gmail.com",
+  "is_valid_syntax": true,
+  "has_mx_records": true,
+  "is_deliverable": true,
+  "error_code": 0,
   "reason": "Correo válido y con registros MX encontrados"
 }
 ```
@@ -217,7 +235,8 @@ curl -X POST http://localhost:3001/api/v1/validate-email \
   "is_valid_syntax": true,
   "has_mx_records": false,
   "is_deliverable": false,
-  "reason": "El dominio no tiene registros MX, el correo no es entregable"
+  "error_code": 3,
+  "reason": "El dominio no posee servidores de correo (registros MX) ni host resoluble"
 }
 ```
 
@@ -228,7 +247,7 @@ curl -X POST http://localhost:3001/api/v1/validate-email \
 | Variable | Descripción | Por defecto | Ejemplo |
 |----------|-------------|-------------|---------|
 | `API_KEY` | Clave de autenticación | **(requerido)** | `super-secret-key-12345` |
-| `ALLOWED_ORIGINS` | Dominios CORS permitidos | `http://localhost:4000,http://localhost:5173` | `https://tudominio.com` |
+| `ALLOWED_ORIGINS` | Dominios CORS permitidos | `http://localhost:3001,http://localhost:5173` | `https://tudominio.com` |
 | `PORT` | Puerto del servidor | `3001` | `8080` |
 | `RATE_LIMIT_QPS` | Solicitudes por segundo | `10` | `50` |
 | `RUST_LOG` | Nivel de logging | `info` | `debug` |

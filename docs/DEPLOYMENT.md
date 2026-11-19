@@ -48,7 +48,7 @@
 ```mermaid
 graph LR
     subgraph "Ingress (Entrada)"
-        HTTP[TCP 3000<br/>API + Admin Panel]
+        HTTP[TCP 3001<br/>API + Admin Panel]
     end
     
     subgraph "Egress (Salida)"
@@ -144,17 +144,17 @@ docker compose ps
 
 ```bash
 # Health check
-curl -f http://localhost:3000/health
+curl -f http://localhost:3001/health
 # ✅ Email Validator API is running
 
 # Validar email (reemplazar API_KEY)
-curl -X POST http://localhost:3000/api/v1/validate-email \
+curl -X POST http://localhost:3001/api/v1/validate-email \
   -H "Content-Type: application/json" \
   -H "X-API-Key: TU_API_KEY_AQUI" \
   -d '{"email":"test@gmail.com"}' | jq .
 
 # Panel admin
-# Abrir: http://localhost:3000/admin
+# Abrir: http://localhost:3001/admin
 # Usuario: ADMIN_USER | Password: ADMIN_PASSWORD
 ```
 
@@ -183,7 +183,7 @@ metadata:
   namespace: email-validator
 data:
   ALLOWED_ORIGINS: "https://app.example.com"
-  PORT: "3000"
+  PORT: "3001"
   RATE_LIMIT_QPS: "100"
   RUST_LOG: "info"
   SMTP_VERIFICATION_ENABLED: "true"
@@ -231,7 +231,7 @@ spec:
         app: email-validator
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "3000"
+        prometheus.io/port: "3001"
         prometheus.io/path: "/metrics"
     spec:
       securityContext:
@@ -244,7 +244,7 @@ spec:
         image: darzkrow/email-validator:v2.0.0
         imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 3000
+        - containerPort: 3001
           name: http
         envFrom:
         - configMapRef:
@@ -261,7 +261,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 3000
+            port: 3001
           initialDelaySeconds: 10
           periodSeconds: 30
           timeoutSeconds: 10
@@ -269,7 +269,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /health
-            port: 3000
+            port: 3001
           initialDelaySeconds: 5
           periodSeconds: 10
           timeoutSeconds: 5
@@ -297,7 +297,7 @@ spec:
     app: email-validator
   ports:
   - port: 80
-    targetPort: 3000
+    targetPort: 3001
     protocol: TCP
     name: http
   type: ClusterIP
@@ -377,8 +377,8 @@ kubectl logs -n email-validator -l app=email-validator -f
 | **API_KEY** | Clave maestra para autenticación | - | ✅ | `sk-prod-a1b2c3d4...` |
 | **ADMIN_USER** | Usuario panel admin | `Administrator` | ❌ | `admin` |
 | **ADMIN_PASSWORD** | Password admin (se hashea) | `admin12345` | ❌ | `SecurePass123!` |
-| **ALLOWED_ORIGINS** | CORS origins (coma-separated) | `http://localhost:3000,http://localhost:5173` | ❌ | `https://app.example.com` |
-| **PORT** | Puerto HTTP | `3000` | ❌ | `8080` |
+| **ALLOWED_ORIGINS** | CORS origins (coma-separated) | `http://localhost:3001,http://localhost:5173` | ❌ | `https://app.example.com` |
+| **PORT** | Puerto HTTP | `3001` | ❌ | `8080` |
 | **RATE_LIMIT_QPS** | Requests/seg por IP | `10` | ❌ | `100` |
 | **RUST_LOG** | Nivel logging | `info` | ❌ | `debug\|info\|warn\|error` |
 | **DATA_DIR** | Directorio persistencia | `./data` | ❌ | `/app/data` |
@@ -529,7 +529,7 @@ dig MX gmail.com +short
 # /etc/nginx/sites-available/email-validator
 upstream email_validator {
     least_conn;
-    server 127.0.0.1:3000 max_fails=3 fail_timeout=30s;
+    server 127.0.0.1:3001 max_fails=3 fail_timeout=30s;
     keepalive 32;
 }
 
@@ -661,13 +661,13 @@ networks:
 
 ```bash
 # Liveness (Kubernetes/Docker)
-curl -f http://localhost:3000/health
+curl -f http://localhost:3001/health
 
 # Readiness (Kubernetes)
-curl -f http://localhost:3000/health
+curl -f http://localhost:3001/health
 
 # Con autenticación (si se protege)
-curl -f -H "X-API-Key: $API_KEY" http://localhost:3000/health
+curl -f -H "X-API-Key: $API_KEY" http://localhost:3001/health
 ```
 
 ### Métricas Clave para Alertas
@@ -711,7 +711,7 @@ graph TB
 # .prometheus.yml (cuando se implemente /metrics endpoint)
 - job_name: 'email-validator'
   static_configs:
-    - targets: ['email-validator:3000']
+    - targets: ['email-validator:3001']
   metrics_path: '/metrics'
   scrape_interval: 30s
 ```
@@ -891,7 +891,7 @@ docker compose up -d --no-deps email-validator
 
 # 5. Health check
 for i in {1..30}; do
-    if curl -sf http://localhost:3000/health >/dev/null; then
+    if curl -sf http://localhost:3001/health >/dev/null; then
         echo "✅ Servicio saludable"
         break
     fi
@@ -900,7 +900,7 @@ done
 
 # 6. Verificar métricas
 sleep 10
-curl -s -H "X-API-Key: $API_KEY" http://localhost:3000/api/v1/validate-email \
+curl -s -H "X-API-Key: $API_KEY" http://localhost:3001/api/v1/validate-email \
   -d '{"email":"test@gmail.com"}' | jq .is_deliverable
 
 echo "✅ Actualización completada"
@@ -935,7 +935,7 @@ docker compose up -d email-validator
 
 # Verificar
 for i in {1..30}; do
-    if curl -sf http://localhost:3000/health >/dev/null; then
+    if curl -sf http://localhost:3001/health >/dev/null; then
         echo "✅ Rollback completado"
         exit 0
     fi
@@ -1050,16 +1050,16 @@ docker compose exec email-validator sh -c 'RUST_LOG=debug ./email-validator'
 
 ```bash
 # Obtener métricas actuales (requiere auth admin)
-curl -u admin:password http://localhost:3000/api/v1/admin/metrics | jq .
+curl -u admin:password http://localhost:3001/api/v1/admin/metrics | jq .
 
 # Ver dominios problemáticos
-curl -u admin:password http://localhost:3000/api/v1/admin/metrics | jq .top_problematic_domains
+curl -u admin:password http://localhost:3001/api/v1/admin/metrics | jq .top_problematic_domains
 
 # Ver logs recientes
-curl -u admin:password http://localhost:3000/api/v1/admin/logs | jq .
+curl -u admin:password http://localhost:3001/api/v1/admin/logs | jq .
 
 # Test de validación completa
-curl -X POST http://localhost:3000/api/v1/validate-email \
+curl -X POST http://localhost:3001/api/v1/validate-email \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
   -d '{"email":"test@gmail.com"}' | jq .

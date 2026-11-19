@@ -51,7 +51,7 @@
 | **Firewall Rules** | Graph LR | Ingress/Egress rules con puertos específicos |
 | **Dockerfile Multi-stage** | Flowchart TD | Build stage → Runtime stage (distroless) |
 | **Estrategia Blue-Green** | Graph LR | Blue/Green deployment + Canary |
-| **Ports & Firewall** | Graph LR | Ingress (3000) / Egress (25, 587, 465, 53) |
+| **Ports & Firewall** | Graph LR | Ingress (3001) / Egress (25, 587, 465, 53) |
 
 ### TROUBLESHOOTING.md (6 diagramas)
 

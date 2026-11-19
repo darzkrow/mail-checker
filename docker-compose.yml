@@ -10,7 +10,7 @@ services:
       - API_KEY=${API_KEY:-your-super-secret-api-key-change-me-in-production}
       - ADMIN_USER=${ADMIN_USER:-Administrator}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin12345}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:4000,http://localhost:5173,http://localhost:8080}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3001,http://localhost:5173,http://localhost:8080}
       - PORT=3001
       - RATE_LIMIT_QPS=${RATE_LIMIT_QPS:-10}
       - DNS_NAMESERVERS=${DNS_NAMESERVERS:-}
