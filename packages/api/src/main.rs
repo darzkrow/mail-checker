@@ -23,6 +23,7 @@ use shared::{
     error_codes, AdminPasswordHash, ApiKeyRecord, AppConfig, AtomicMetrics, DomainTracker,
     EmailValidationResponse, MetricsSnapshot, PasswordPolicy, ValidationError,
 };
+use email_validator_smtp::{SmtpConfig, SmtpVerifier, SmtpVerificationResult};
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
@@ -180,6 +181,7 @@ struct AppState {
     domain_tracker: Arc<DomainTracker>,
     log_buffer: LogBuffer,
     start_time: Instant,
+    smtp_verifier: Arc<SmtpVerifier>,
 }
 
 // ==================== VERIFICACIÓN DE CREDENCIALES ADMIN ====================
@@ -267,6 +269,11 @@ async fn validate_email_handler(
             is_deliverable: false,
             error_code: error_codes::ERR_INVALID_SYNTAX,
             reason,
+            smtp_verification: None,
+            smtp_detail: None,
+            is_catch_all: None,
+            is_disposable: None,
+            is_role_based: None,
         };
         return Ok((StatusCode::OK, Json(response)));
     }
@@ -296,16 +303,57 @@ async fn validate_email_handler(
         }
     };
 
+    // 5. Verificación SMTP real (si está habilitada y hay registros MX)
+    let smtp_verification_enabled = std::env::var("SMTP_VERIFICATION_ENABLED")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(false);
+
+    let (smtp_verification, is_deliverable, smtp_detail, is_catch_all) = if has_mx && smtp_verification_enabled {
+        match state.smtp_verifier.verify(&state.resolver, &email).await {
+            Ok(result) => {
+                let is_deliverable = result.is_deliverable();
+                let detail = result.reason().to_string();
+                let is_catch_all = matches!(result, SmtpVerificationResult::CatchAll);
+                (Some(result), is_deliverable, Some(detail), Some(is_catch_all))
+            }
+            Err(e) => {
+                tracing::warn!("Error en verificación SMTP para {}: {}", email, e);
+                (Some(SmtpVerificationResult::ConnectionError), false, Some(e.to_string()), Some(false))
+            }
+        }
+    } else if has_mx {
+        // Solo MX, sin verificación SMTP
+        (None, true, None, None)
+    } else {
+        // Sin MX
+        (None, false, None, None)
+    };
+
     let elapsed = timer.elapsed().as_millis() as u64;
     state.metrics.record_processed(has_mx, elapsed);
 
-    info!("Validación completada para {}: MX={} (código={}, {}ms)", domain, has_mx, error_code, elapsed);
+    info!("Validación completada para {}: MX={}, SMTP={:?} (código={}, {}ms)", domain, has_mx, smtp_verification, error_code, elapsed);
 
-    // 5. Formatear y construir respuesta coherente con código numérico para mapeo
-    let response = if let Some(reason) = custom_reason {
-        format_response_custom(email, true, false, error_code, reason)
+    // 6. Formatear y construir respuesta coherente con código numérico para mapeo
+    let final_error_code = if let Some(ref smtp_res) = smtp_verification {
+        smtp_res.error_code()
     } else {
-        format_response(email, true, has_mx, error_code)
+        error_code
+    };
+
+    let response = if let Some(reason) = custom_reason {
+        let mut resp = format_response_custom(email, true, false, final_error_code, reason);
+        resp.smtp_verification = smtp_verification.as_ref().map(|r| format!("{:?}", r));
+        resp.smtp_detail = smtp_detail;
+        resp.is_catch_all = is_catch_all;
+        resp
+    } else {
+        let mut resp = format_response(email, true, is_deliverable, final_error_code);
+        resp.smtp_verification = smtp_verification.as_ref().map(|r| format!("{:?}", r));
+        resp.smtp_detail = smtp_detail;
+        resp.is_catch_all = is_catch_all;
+        resp
     };
 
     Ok((StatusCode::OK, Json(response)))
@@ -644,6 +692,67 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let domain_tracker = Arc::new(DomainTracker::new());
     let admin_auth = Arc::new(RwLock::new(config.admin_password_hash.clone()));
 
+    // 3. Configurar verificador SMTP
+    let smtp_config = SmtpConfig {
+        primary_port: std::env::var("SMTP_PRIMARY_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(25),
+        submission_port: std::env::var("SMTP_SUBMISSION_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(587),
+        smtps_port: std::env::var("SMTP_SMTPS_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(465),
+        connect_timeout: Duration::from_secs(
+            std::env::var("SMTP_CONNECT_TIMEOUT_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10),
+        ),
+        command_timeout: Duration::from_secs(
+            std::env::var("SMTP_COMMAND_TIMEOUT_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10),
+        ),
+        total_timeout: Duration::from_secs(
+            std::env::var("SMTP_TOTAL_TIMEOUT_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(30),
+        ),
+        max_retries: std::env::var("SMTP_MAX_RETRIES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(2),
+        retry_backoff_base: Duration::from_secs(
+            std::env::var("SMTP_RETRY_BACKOFF_SECS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5),
+        ),
+        helo_domain: std::env::var("SMTP_HELO_DOMAIN")
+            .unwrap_or_else(|_| "email-validator.local".to_string()),
+        mail_from: std::env::var("SMTP_MAIL_FROM").unwrap_or_default(),
+        danger_accept_invalid_certs: std::env::var("SMTP_DANGER_ACCEPT_INVALID_CERTS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(false),
+        enable_catch_all_detection: std::env::var("SMTP_ENABLE_CATCH_ALL_DETECTION")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(true),
+        catch_all_test_domain: None,
+    };
+
+    let smtp_verifier = Arc::new(
+        SmtpVerifier::new(smtp_config)
+            .map_err(|e| format!("Error creando verificador SMTP: {}", e))?
+    );
+
     let state = Arc::new(AppState {
         config: Arc::clone(&config),
         admin_auth,
@@ -654,6 +763,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         domain_tracker,
         log_buffer,
         start_time: Instant::now(),
+        smtp_verifier,
     });
 
     println!("========================================");

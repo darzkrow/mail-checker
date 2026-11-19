@@ -217,6 +217,11 @@ pub fn format_response(
         is_deliverable,
         error_code,
         reason,
+        smtp_verification: None,
+        smtp_detail: None,
+        is_catch_all: None,
+        is_disposable: None,
+        is_role_based: None,
     }
 }
 
@@ -236,6 +241,11 @@ pub fn format_response_custom(
         is_deliverable,
         error_code,
         reason,
+        smtp_verification: None,
+        smtp_detail: None,
+        is_catch_all: None,
+        is_disposable: None,
+        is_role_based: None,
     }
 }
 

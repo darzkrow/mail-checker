@@ -48,6 +48,18 @@ pub mod error_codes {
     pub const ERR_RATE_LIMITED: u32 = 7;
     /// 8: Tamaño de carga útil excedido (Máximo 2KB)
     pub const ERR_PAYLOAD_TOO_LARGE: u32 = 8;
+    /// 9: Buzón rechazado por servidor SMTP (inexistente, lleno, política)
+    pub const ERR_SMTP_REJECTED: u32 = 9;
+    /// 10: Dominio catch-all (acepta cualquier destinatario, no verificable individualmente)
+    pub const ERR_CATCH_ALL: u32 = 10;
+    /// 11: Fallo temporal SMTP (greylisting, servidor ocupado) - reintentar
+    pub const ERR_SMTP_TEMPORARY_FAILURE: u32 = 11;
+    /// 12: Error de conexión/timeout al servidor SMTP
+    pub const ERR_SMTP_CONNECTION_ERROR: u32 = 12;
+    /// 13: Email desechable (dominio temporal conocido)
+    pub const ERR_DISPOSABLE_EMAIL: u32 = 13;
+    /// 14: Email basado en rol (admin@, info@, support@, etc.) - warning
+    pub const WARN_ROLE_BASED_EMAIL: u32 = 14;
 }
 
 /// Respuesta de validación de email con código numérico estándar de error
@@ -60,6 +72,21 @@ pub struct EmailValidationResponse {
     /// Código numérico de error para mapeo directo (0 = Éxito/Válido, >0 = Error)
     pub error_code: u32,
     pub reason: String,
+    /// Resultado detallado de verificación SMTP (si se habilitó)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub smtp_verification: Option<String>,
+    /// Detalle adicional del resultado SMTP
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub smtp_detail: Option<String>,
+    /// Si el dominio es catch-all (acepta cualquier destinatario)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_catch_all: Option<bool>,
+    /// Si el email es de un dominio desechable conocido
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_disposable: Option<bool>,
+    /// Si el email es role-based (admin@, info@, support@, etc.)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_role_based: Option<bool>,
 }
 
 /// Registro persistente de API Key con soporte de expiración
