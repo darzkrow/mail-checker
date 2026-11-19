@@ -18,6 +18,43 @@ Este documento registra todas las correcciones, parches y mejoras aplicadas al m
 | **PATCH-08** | `packages/api` | Rate Limiter declarado pero no ejecutado | 🟡 Media | DoS Mitigation | ✅ Resuelto |
 | **PATCH-09** | `packages/api` | Comentario de sintaxis JavaScript inválido en `admin_ui.rs` | 🟢 Baja | EcmaScript Standard | ✅ Resuelto |
 | **PATCH-10** | `packages/shared`, `packages/api` | Rediseño de KPIs operativos y tracking de dominios problemáticos | 🟡 Media | Observabilidad Operativa | ✅ Resuelto |
+| **v2.0.0** | **Release Mayor** | **Verificación SMTP Real (RCPT TO), Cache MX, Pool Conexiones, Detección Avanzada** | 🟢 Feature | RFC 5321, RFC 5322, RFC 7505 | ✅ Liberado |
+
+---
+
+### 🚀 **v2.0.0 - Release Mayor: Verificación SMTP Real y Optimizaciones** (2026-11-19)
+
+**Cambios principales:**
+
+1. **Nuevo crate `packages/smtp`** - Verificación real de entregabilidad mediante conexión SMTP real:
+   - Transacción SMTP completa: `CONNECT → EHLO → STARTTLS → MAIL FROM:<> → RCPT TO:<email> → QUIT`
+   - Soporte puertos 25 (plano), 587 (STARTTLS), 465 (SMTPS implícito) con fallback automático
+   - Parseo códigos SMTP: 250 (Deliverable), 550/551/552/553/554 (Undeliverable), 450/451/452 (TemporaryFailure)
+   - Detección Null MX (RFC 7505) y Catch-all domains
+   - Reintentos automáticos con backoff exponencial en fallos temporales (4xx)
+
+2. **Cache MX LRU** (`MxCache`) con TTL configurable (default 1h) y evicción LRU
+
+3. **Pool de conexiones SMTP** (`SmtpConnectionPool`) por host MX con reutilización y limpieza idle
+
+4. **Detección avanzada de calidad de email:**
+   - `DisposableEmailDetector`: 12+ dominios temporales conocidos (temp-mail.org, guerrillamail.com, etc.)
+   - `RoleBasedEmailDetector`: 25+ prefijos de rol (admin@, info@, support@, noreply@, etc.)
+   - Integración en respuesta API: `is_disposable`, `is_role_based`, `is_catch_all`
+
+5. **Nuevos códigos de error SMTP** (9-14):
+   - `9` - `ERR_SMTP_REJECTED`: Buzón rechazado (inexistente, lleno, política)
+   - `10` - `ERR_CATCH_ALL`: Dominio catch-all
+   - `11` - `ERR_SMTP_TEMPORARY_FAILURE`: Greylisting/servidor ocupado
+   - `12` - `ERR_SMTP_CONNECTION_ERROR`: Error conexión/timeout
+   - `13` - `ERR_DISPOSABLE_EMAIL`: Email desechable
+   - `14` - `WARN_ROLE_BASED_EMAIL`: Email role-based (admin@, info@, etc.)
+
+6. **Nuevas variables de entorno** (17 variables SMTP configurables)
+
+7. **Tests exhaustivos:** Mock SMTP server para testing sin acceso a internet, 21 tests unitarios/integración
+
+8. **Documentación actualizada:** API_REFERENCE, ERROR_CODES, README, Postman Collection, .env.example
 
 ---
 

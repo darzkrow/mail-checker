@@ -26,6 +26,7 @@ sha2.workspace = true
 shared = { path = "../shared" }
 validation = { path = "../validation" }
 dns = { path = "../dns" }
+email-validator-smtp = { path = "../smtp" }
 
 [dev-dependencies]
 tokio-test = "0.4"

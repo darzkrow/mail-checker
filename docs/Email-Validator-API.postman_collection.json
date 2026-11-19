@@ -469,6 +469,167 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "🔍 Verificación SMTP Real (v2.0)",
+      "item": [
+        {
+          "name": "SMTP Deliverable - Valid Mailbox",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"usuario@gmail.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "SMTP Undeliverable - Mailbox Not Found",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"noexiste12345@gmail.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "SMTP Catch-All Domain",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"random-uuid-12345@catchall-domain.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "SMTP Disposable Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@temp-mail.org\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "SMTP Role-Based Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "SMTP Greylisting (Temporary Failure)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@greylisting-domain.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/validate-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "validate-email"]
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [

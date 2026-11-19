@@ -28,6 +28,12 @@ Para evitar el análisis frágil de cadenas de texto (`reason` o `error`), la AP
 | **`6`** | `ERR_UNAUTHORIZED` | `401 Unauthorized` | Auth | API Key ausente, incorrecta o expirada | Renovar credencial en header `X-API-Key` |
 | **`7`** | `ERR_RATE_LIMITED` | `429 Too Many Requests` | Límites | Límite de peticiones/segundo excedido | Pausar peticiones / backoff exponencial |
 | **`8`** | `ERR_PAYLOAD_TOO_LARGE`| `413 Payload Too Large` | Validación | Cuerpo de petición mayor a 2KB | Reducir tamaño del JSON enviado |
+| **`9`** | `ERR_SMTP_REJECTED` | `200 OK` | SMTP | Buzón rechazado por servidor SMTP (inexistente, lleno, política) | Correo no entregable - buzón inválido |
+| **`10`** | `ERR_CATCH_ALL` | `200 OK` | SMTP | Dominio catch-all (acepta cualquier destinatario) | No verificable individualmente - precaución |
+| **`11`** | `ERR_SMTP_TEMPORARY_FAILURE` | `200 OK` | SMTP | Fallo temporal SMTP (greylisting, servidor ocupado) | Reintentar automáticamente |
+| **`12`** | `ERR_SMTP_CONNECTION_ERROR` | `200 OK` | SMTP | Error de conexión/timeout al servidor SMTP | Reintentar / verificar conectividad |
+| **`13`** | `ERR_DISPOSABLE_EMAIL` | `200 OK` | Calidad | Email desechable (dominio temporal conocido) | No recomendado para registros |
+| **`14`** | `WARN_ROLE_BASED_EMAIL` | `200 OK` | Calidad | Email basado en rol (admin@, info@, support@, etc.) | Decisión de negocio - no error técnico |
 
 ### **Ejemplo de Implementación de Mapping en el Cliente (JavaScript / TypeScript)**
 
@@ -47,6 +53,9 @@ switch (data.error_code) {
   case 0:
     // Correo verificado con éxito
     console.log("Email válido y entregable");
+    if (data.smtp_verification === "Deliverable") {
+      console.log("✅ Verificación SMTP: Buzón confirmado entregable");
+    }
     break;
   case 2:
     showError("La dirección tiene errores de escritura o formato inválido.");
@@ -63,6 +72,24 @@ switch (data.error_code) {
     break;
   case 7:
     console.warn("Límite de solicitudes alcanzado. Espere un momento.");
+    break;
+  case 9:
+    showError("Buzón rechazado por el servidor de correo: " + data.smtp_detail);
+    break;
+  case 10:
+    showWarning("Dominio catch-all detectado: no verificable individualmente. " + data.smtp_detail);
+    break;
+  case 11:
+    showWarning("Fallo temporal SMTP (greylisting/servidor ocupado): " + data.smtp_detail + ". Reintentando...");
+    break;
+  case 12:
+    showWarning("Error de conexión SMTP: " + data.smtp_detail + ". Verificar conectividad.");
+    break;
+  case 13:
+    showWarning("Email desechable detectado: " + data.reason + ". No recomendado para registros.");
+    break;
+  case 14:
+    console.info("Email role-based detectado: " + data.reason + ". Decisión de negocio requerida.");
     break;
   default:
     console.error(`Error no clasificado (${data.error_code}): ${data.reason || data.error}`);

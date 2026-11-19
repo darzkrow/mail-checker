@@ -128,9 +128,14 @@ X-API-Key: <tu-api-key>
 | `email` | string | Dirección de correo validada |
 | `is_valid_syntax` | boolean | `true` si la sintaxis cumple con RFC 5321 / RFC 5322 |
 | `has_mx_records` | boolean | `true` si el dominio tiene servidores de correo activos |
-| `is_deliverable` | boolean | `true` si cumple sintaxis y servidores MX operativos |
+| `is_deliverable` | boolean | `true` si cumple sintaxis y servidores MX operativos **y verificación SMTP exitosa** |
 | `error_code` | integer | Código numérico entero para **mapping directo** de estados y errores |
 | `reason` | string | Explicación detallada del resultado |
+| `smtp_verification` | string (opcional) | Resultado de verificación SMTP: `Deliverable`, `Undeliverable`, `CatchAll`, `TemporaryFailure`, `ConnectionError`, `NoMxRecords`, `NullMx` |
+| `smtp_detail` | string (opcional) | Detalle adicional del resultado SMTP (código y mensaje del servidor) |
+| `is_catch_all` | boolean (opcional) | `true` si el dominio es catch-all (acepta cualquier destinatario) |
+| `is_disposable` | boolean (opcional) | `true` si el email pertenece a un dominio desechable conocido |
+| `is_role_based` | boolean (opcional) | `true` si el email es role-based (admin@, info@, support@, etc.) |
 
 ---
 
@@ -147,6 +152,12 @@ X-API-Key: <tu-api-key>
 | **`6`** | `ERR_UNAUTHORIZED` | `401 Unauthorized` | API Key ausente, incorrecta o expirada | Renovar credencial en header `X-API-Key` |
 | **`7`** | `ERR_RATE_LIMITED` | `429 Too Many Requests` | Límite de peticiones/segundo excedido | Pausar peticiones / backoff exponencial |
 | **`8`** | `ERR_PAYLOAD_TOO_LARGE`| `413 Payload Too Large` | Cuerpo de petición mayor a 2KB | Reducir tamaño del JSON enviado |
+| **`9`** | `ERR_SMTP_REJECTED` | `200 OK` | Buzón rechazado por servidor SMTP (inexistente, lleno, política) | Correo no entregable - buzón inválido |
+| **`10`** | `ERR_CATCH_ALL` | `200 OK` | Dominio catch-all (acepta cualquier destinatario) | No verificable individualmente - precaución |
+| **`11`** | `ERR_SMTP_TEMPORARY_FAILURE` | `200 OK` | Fallo temporal SMTP (greylisting, servidor ocupado) | Reintentar automáticamente |
+| **`12`** | `ERR_SMTP_CONNECTION_ERROR` | `200 OK` | Error de conexión/timeout al servidor SMTP | Reintentar / verificar conectividad |
+| **`13`** | `ERR_DISPOSABLE_EMAIL` | `200 OK` | Email desechable (dominio temporal conocido) | No recomendado para registros |
+| **`14`** | `WARN_ROLE_BASED_EMAIL` | `200 OK` | Email basado en rol (admin@, info@, support@, etc.) | Decisión de negocio - no error técnico |
 
 ## 🛠️ **Ejemplos de Uso**
 
